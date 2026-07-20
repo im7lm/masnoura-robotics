@@ -1,0 +1,542 @@
+import { useEffect, useState } from 'react';
+import { Building2, Users, Shield, KeyRound, Plus, Trash2, Pencil, Save, X, Mail, Lock, ChevronDown, UserCircle2 } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
+import { Badge, RoleBadge, SectionHeader, Avatar, Field, Modal, EmptyState } from '../components/ui';
+import { Breadcrumbs } from '../components/Router';
+import { useToast } from '../components/Toast';
+import { useAuth, ROLE_LABELS, ROLE_PERMISSIONS } from '../lib/auth';
+import { supabase, type Role, type Committee, type Member } from '../lib/supabase';
+
+type Tab = 'committees' | 'users' | 'directors' | 'roles';
+const TABS: { key: Tab; label: string; icon: LucideIcon }[] = [
+  { key: 'committees', label: 'Committees', icon: Building2 },
+  { key: 'users', label: 'Users', icon: Users },
+  { key: 'directors', label: 'Directors', icon: Shield },
+  { key: 'roles', label: 'Roles & Permissions', icon: KeyRound },
+];
+
+export function TeamManagementPage() {
+  const [tab, setTab] = useState<Tab>('committees');
+  return (
+    <div className="space-y-5">
+      <Breadcrumbs items={[{ label: 'Workspace', to: '/dashboard' }, { label: 'Team Management' }]} />
+      <SectionHeader title="Team Management" description="The control center of the entire organization. Create committees, users, assign directors and leaders." />
+
+      <div className="flex gap-1 p-1 bg-ink-100 rounded-xl w-fit">
+        {TABS.map((t) => {
+          const Icon = t.icon;
+          return (
+            <button key={t.key} onClick={() => setTab(t.key)} className={`flex items-center gap-2 px-3.5 h-9 rounded-lg text-sm font-medium transition-all ${tab === t.key ? 'bg-white text-ink-900 shadow-soft' : 'text-ink-500 hover:text-ink-700'}`}>
+              <Icon size={15} /> {t.label}
+            </button>
+          );
+        })}
+      </div>
+
+      {tab === 'committees' && <CommitteesTab />}
+      {tab === 'users' && <UsersTab />}
+      {tab === 'directors' && <DirectorsTab />}
+      {tab === 'roles' && <RolesTab />}
+    </div>
+  );
+}
+
+// ===== COMMITTEES TAB =====
+function CommitteesTab() {
+  const { push } = useToast();
+  const { committees, members, directorAssignments } = useAuth();
+  const [showCreate, setShowCreate] = useState(false);
+  const [editing, setEditing] = useState<Committee | null>(null);
+  const [refreshKey, setRefreshKey] = useState(0);
+  const refresh = () => setRefreshKey((k) => k + 1);
+
+  const [name, setName] = useState('');
+  const [type, setType] = useState<'technical' | 'non_technical'>('technical');
+  const [color, setColor] = useState('#E53935');
+  const [directorId, setDirectorId] = useState('');
+
+  const createCommittee = async () => {
+    if (!name.trim()) { push('error', 'Committee name required'); return; }
+    const { data, error } = await supabase.from('committees').insert({ name, type, color }).select().single();
+    if (error) { push('error', error.message); return; }
+    if (directorId) {
+      const { error: dirErr } = await supabase.from('director_committees').insert({ director_id: directorId, committee_id: data.id });
+      if (dirErr) push('error', 'Committee created, but director assignment failed');
+    }
+    push('success', 'Committee created');
+    setShowCreate(false); setName(''); setType('technical'); setColor('#E53935'); setDirectorId('');
+    refresh();
+  };
+
+  const deleteCommittee = async (id: string) => {
+    if (!confirm('Delete this committee? All its sessions, tasks, and data will be removed.')) return;
+    const { error } = await supabase.from('committees').delete().eq('id', id);
+    if (error) { push('error', error.message); return; }
+    push('success', 'Committee deleted'); refresh();
+  };
+
+  const directors = members.filter((m) => m.role === 'director');
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <p className="text-sm text-ink-500">{committees.length} committees in the organization</p>
+        <button className="btn-primary btn-md" onClick={() => setShowCreate(true)}><Plus size={15} /> New Committee</button>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {committees.map((c) => {
+          const cMembers = members.filter((m) => m.committee_id === c.id);
+          const cDirectorAssignments = directorAssignments.filter((d) => d.committee_id === c.id);
+          const cDirectors = cDirectorAssignments.map((da) => members.find((m) => m.id === da.director_id)).filter(Boolean);
+          const teamLeader = cMembers.find((m) => m.role === 'team_leader');
+          const viceLeader = cMembers.find((m) => m.role === 'vice_team_leader');
+          const hr = cMembers.find((m) => m.role === 'hr');
+          const memberCount = cMembers.filter((m) => m.role === 'member').length;
+
+          return (
+            <CommitteeCard
+              key={c.id}
+              committee={c}
+              directors={cDirectors as Member[]}
+              teamLeader={teamLeader ?? null}
+              viceLeader={viceLeader ?? null}
+              hr={hr ?? null}
+              memberCount={memberCount}
+              allMembers={members}
+              onEdit={() => setEditing(c)}
+              onDelete={() => deleteCommittee(c.id)}
+              onRefresh={refresh}
+            />
+          );
+        })}
+      </div>
+
+      {committees.length === 0 && (
+        <div className="card"><EmptyState icon={<Building2 size={22} />} title="No committees yet" description="Create your first committee to start building the organization." action={<button className="btn-primary btn-md" onClick={() => setShowCreate(true)}><Plus size={15} /> Create Committee</button>} /></div>
+      )}
+
+      <Modal open={showCreate} onClose={() => setShowCreate(false)} title="Create Committee" footer={<>
+        <button className="btn-secondary btn-md" onClick={() => setShowCreate(false)}>Cancel</button>
+        <button className="btn-primary btn-md" onClick={createCommittee}>Create</button>
+      </>}>
+        <div className="space-y-4">
+          <Field label="Committee Name" value={name} onChange={setName} placeholder="e.g. Embedded Systems" />
+          <div>
+            <label className="text-xs font-medium text-ink-600 mb-1.5 block">Category</label>
+            <div className="grid grid-cols-2 gap-2">
+              <button onClick={() => setType('technical')} className={`flex items-center justify-center gap-2 h-10 rounded-xl border text-sm font-medium transition-all ${type === 'technical' ? 'border-brand-500 bg-brand-50 text-brand-700' : 'border-ink-200 text-ink-600 hover:bg-ink-50'}`}>
+                <span className="w-2 h-2 rounded-full bg-brand-500" /> Technical
+              </button>
+              <button onClick={() => setType('non_technical')} className={`flex items-center justify-center gap-2 h-10 rounded-xl border text-sm font-medium transition-all ${type === 'non_technical' ? 'border-mint-500 bg-mint-50 text-mint-700' : 'border-ink-200 text-ink-600 hover:bg-ink-50'}`}>
+                <span className="w-2 h-2 rounded-full bg-mint-500" /> Non Technical
+              </button>
+            </div>
+          </div>
+          <div>
+            <label className="text-xs font-medium text-ink-600 mb-1.5 block">Color</label>
+            <input type="color" value={color} onChange={(e) => setColor(e.target.value)} className="w-full h-10 rounded-xl border border-ink-200 cursor-pointer" />
+          </div>
+          <div>
+            <label className="text-xs font-medium text-ink-600 mb-1.5 block">Director (optional)</label>
+            <select value={directorId} onChange={(e) => setDirectorId(e.target.value)} className="input">
+              <option value="">Assign an existing director or skip</option>
+              {directors.map((d) => <option key={d.id} value={d.id}>{d.name} — {d.position}</option>)}
+            </select>
+          </div>
+          <p className="text-xs text-ink-400">Team Leader, Vice Team Leader, and HR are assigned later from the committee card.</p>
+        </div>
+      </Modal>
+
+      {editing && <EditCommitteeModal committee={editing} onClose={() => setEditing(null)} onSaved={refresh} />}
+    </div>
+  );
+}
+
+function CommitteeCard({ committee, directors, teamLeader, viceLeader, hr, memberCount, allMembers, onEdit, onDelete, onRefresh }: {
+  committee: Committee; directors: Member[]; teamLeader: Member | null; viceLeader: Member | null; hr: Member | null; memberCount: number; allMembers: Member[];
+  onEdit: () => void; onDelete: () => void; onRefresh: () => void;
+}) {
+  const { push } = useToast();
+  const [assigning, setAssigning] = useState<null | 'team_leader' | 'vice_team_leader' | 'hr'>(null);
+  const [selectedUserId, setSelectedUserId] = useState('');
+
+  const assignRole = async (role: 'team_leader' | 'vice_team_leader' | 'hr') => {
+    if (!selectedUserId) { push('error', 'Select a user'); return; }
+    // Unset previous role holder
+    await supabase.from('members').update({ role: 'member' }).eq('committee_id', committee.id).eq('role', role);
+    const { error } = await supabase.from('members').update({ role, committee_id: committee.id }).eq('id', selectedUserId);
+    if (error) { push('error', error.message); return; }
+    push('success', `${ROLE_LABELS[role]} assigned`);
+    setAssigning(null); setSelectedUserId('');
+    onRefresh();
+  };
+
+  const candidates = allMembers.filter((m) => m.committee_id === committee.id || m.role === 'member');
+
+  return (
+    <div className="card p-5">
+      <div className="flex items-start justify-between mb-4">
+        <div className="flex items-center gap-3">
+          <span className="w-11 h-11 rounded-xl flex items-center justify-center text-white font-semibold text-lg" style={{ background: committee.color }}>
+            {committee.name[0]}
+          </span>
+          <div>
+            <h3 className="font-semibold text-ink-900">{committee.name}</h3>
+            <p className="text-xs text-ink-500 capitalize">{committee.type}</p>
+          </div>
+        </div>
+        <div className="flex gap-1">
+          <button onClick={onEdit} className="w-8 h-8 rounded-lg hover:bg-ink-100 flex items-center justify-center text-ink-400 hover:text-ink-700 transition-colors"><Pencil size={14} /></button>
+          <button onClick={onDelete} className="w-8 h-8 rounded-lg hover:bg-red-50 flex items-center justify-center text-ink-400 hover:text-brand-600 transition-colors"><Trash2 size={14} /></button>
+        </div>
+      </div>
+
+      <div className="space-y-2.5 mb-4">
+        <RoleRow label="Director" members={directors} />
+        <RoleRow label="Team Leader" members={teamLeader ? [teamLeader] : []} onAssign={() => setAssigning('team_leader')} />
+        <RoleRow label="Vice Team Leader" members={viceLeader ? [viceLeader] : []} onAssign={() => setAssigning('vice_team_leader')} />
+        <RoleRow label="HR" members={hr ? [hr] : []} onAssign={() => setAssigning('hr')} />
+        <div className="flex items-center justify-between pt-2 border-t border-ink-100">
+          <span className="text-xs text-ink-500">Members</span>
+          <span className="text-sm font-semibold text-ink-800">{memberCount}</span>
+        </div>
+      </div>
+
+      {assigning && (
+        <div className="flex gap-2 p-2 rounded-xl bg-ink-50 animate-slide-down">
+          <select value={selectedUserId} onChange={(e) => setSelectedUserId(e.target.value)} className="input flex-1 !h-9 text-sm">
+            <option value="">Select user...</option>
+            {candidates.map((m) => <option key={m.id} value={m.id}>{m.name} — {m.position}</option>)}
+          </select>
+          <button className="btn-primary btn-sm" onClick={() => assignRole(assigning)}>Assign</button>
+          <button className="btn-secondary btn-sm" onClick={() => setAssigning(null)}>Cancel</button>
+        </div>
+      )}
+
+      <div className="flex gap-2 mt-4 pt-4 border-t border-ink-100">
+        <button onClick={() => setAssigning('team_leader')} className="btn-secondary btn-sm flex-1 justify-center text-xs">Assign TL</button>
+        <button onClick={() => setAssigning('vice_team_leader')} className="btn-secondary btn-sm flex-1 justify-center text-xs">Assign VTL</button>
+        <button onClick={() => setAssigning('hr')} className="btn-secondary btn-sm flex-1 justify-center text-xs">Assign HR</button>
+      </div>
+
+      <Modal open={!!assigning} onClose={() => setAssigning(null)} title={`Assign ${assigning ? ROLE_LABELS[assigning] : ''}`} footer={<>
+        <button className="btn-secondary btn-md" onClick={() => setAssigning(null)}>Cancel</button>
+        <button className="btn-primary btn-md" onClick={() => assigning && assignRole(assigning)}>Assign</button>
+      </>}>
+        <p className="text-sm text-ink-500 mb-3">Select an existing user to assign as {assigning ? ROLE_LABELS[assigning] : ''} for {committee.name}.</p>
+        <select value={selectedUserId} onChange={(e) => setSelectedUserId(e.target.value)} className="input">
+          <option value="">Select user...</option>
+          {candidates.map((m) => <option key={m.id} value={m.id}>{m.name} — {m.position}</option>)}
+        </select>
+      </Modal>
+    </div>
+  );
+}
+
+function RoleRow({ label, members, onAssign }: { label: string; members: Member[]; onAssign?: () => void }) {
+  return (
+    <div className="flex items-center justify-between">
+      <span className="text-xs text-ink-500">{label}</span>
+      <div className="flex items-center gap-1.5">
+        {members.length > 0 ? members.map((m) => (
+          <div key={m.id} className="flex items-center gap-1.5">
+            <Avatar src={m.avatar_url} name={m.name} size={20} />
+            <span className="text-xs font-medium text-ink-800">{m.name}</span>
+          </div>
+        )) : (
+          <span className="text-xs text-ink-400">Not assigned</span>
+        )}
+        {onAssign && <button onClick={onAssign} className="text-xs text-brand-600 hover:underline ml-1">Change</button>}
+      </div>
+    </div>
+  );
+}
+
+function EditCommitteeModal({ committee, onClose, onSaved }: { committee: Committee; onClose: () => void; onSaved: () => void }) {
+  const { push } = useToast();
+  const [name, setName] = useState(committee.name);
+  const [type, setType] = useState(committee.type);
+  const [color, setColor] = useState(committee.color);
+
+  const save = async () => {
+    const { error } = await supabase.from('committees').update({ name, type, color }).eq('id', committee.id);
+    if (error) { push('error', error.message); return; }
+    push('success', 'Committee updated'); onClose(); onSaved();
+  };
+
+  return (
+    <Modal open onClose={onClose} title="Edit Committee" footer={<>
+      <button className="btn-secondary btn-md" onClick={onClose}>Cancel</button>
+      <button className="btn-primary btn-md" onClick={save}>Save</button>
+    </>}>
+      <div className="space-y-4">
+        <Field label="Name" value={name} onChange={setName} />
+        <div>
+          <label className="text-xs font-medium text-ink-600 mb-1.5 block">Category</label>
+          <select value={type} onChange={(e) => setType(e.target.value as 'technical' | 'non_technical')} className="input">
+            <option value="technical">Technical</option>
+            <option value="non_technical">Non Technical</option>
+          </select>
+        </div>
+        <div>
+          <label className="text-xs font-medium text-ink-600 mb-1.5 block">Color</label>
+          <input type="color" value={color} onChange={(e) => setColor(e.target.value)} className="w-full h-10 rounded-xl border border-ink-200 cursor-pointer" />
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+// ===== USERS TAB =====
+function UsersTab() {
+  const { push } = useToast();
+  const { members, committees } = useAuth();
+  const [showCreate, setShowCreate] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0);
+  const refresh = () => setRefreshKey((k) => k + 1);
+
+  const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [role, setRole] = useState<Role>('member');
+  const [committeeId, setCommitteeId] = useState('');
+  const [creating, setCreating] = useState(false);
+
+  const createUser = async () => {
+    if (!name || !email || !password || !role) { push('error', 'Fill all required fields'); return; }
+    setCreating(true);
+    try {
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+const { data: sessionData } = await supabase.auth.getSession();
+
+console.log("Session:", sessionData.session);
+console.log("Access Token:", sessionData.session?.access_token);
+
+const res = await fetch(`${supabaseUrl}/functions/v1/create-user`, {
+  method: "POST",
+  headers: {
+    "Content-Type": "application/json",
+    "Authorization": `Bearer ${sessionData.session?.access_token}`,
+  },
+  body: JSON.stringify({
+    name,
+    email,
+    password,
+    role,
+    committee_id: committeeId || null,
+  }),
+});
+
+console.log("Status:", res.status);
+console.log("Response:", await res.text());
+
+return;
+      const data = await res.json();
+      if (!res.ok) { push('error', data.error || 'Failed to create user'); return; }
+      push('success', 'User created — they can now log in');
+      setShowCreate(false); setName(''); setEmail(''); setPassword(''); setRole('member'); setCommitteeId('');
+      refresh();
+    } catch (err) {
+      push('error', (err as Error).message);
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  const deleteMember = async (id: string) => {
+    if (!confirm('Delete this user? This will also delete their auth account.')) return;
+    const { error } = await supabase.from('members').delete().eq('id', id);
+    if (error) { push('error', error.message); return; }
+    push('success', 'User deleted'); refresh();
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <p className="text-sm text-ink-500">{members.length} users in the organization</p>
+        <button className="btn-primary btn-md" onClick={() => setShowCreate(true)}><Plus size={15} /> New User</button>
+      </div>
+
+      <div className="card overflow-hidden">
+        <table className="w-full text-sm">
+          <thead className="bg-ink-50 border-b border-ink-200">
+            <tr>
+              <th className="text-left px-4 py-3 text-xs font-semibold text-ink-500 uppercase tracking-wider">User</th>
+              <th className="text-left px-4 py-3 text-xs font-semibold text-ink-500 uppercase tracking-wider">Role</th>
+              <th className="text-left px-4 py-3 text-xs font-semibold text-ink-500 uppercase tracking-wider">Committee</th>
+              <th className="text-left px-4 py-3 text-xs font-semibold text-ink-500 uppercase tracking-wider">Status</th>
+              <th className="px-4 py-3"></th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-ink-100">
+            {members.map((m) => {
+              const c = committees.find((c) => c.id === m.committee_id);
+              return (
+                <tr key={m.id} className="hover:bg-ink-50/50 transition-colors">
+                  <td className="px-4 py-3">
+                    <div className="flex items-center gap-2.5">
+                      <Avatar src={m.avatar_url} name={m.name} size={32} />
+                      <div>
+                        <p className="font-medium text-ink-800">{m.name}</p>
+                        <p className="text-xs text-ink-400">{m.email}</p>
+                      </div>
+                    </div>
+                  </td>
+                  <td className="px-4 py-3"><RoleBadge role={m.role} /></td>
+                  <td className="px-4 py-3 text-ink-600">{c?.name ?? '—'}</td>
+                  <td className="px-4 py-3"><Badge tone={m.status === 'active' ? 'mint' : 'neutral'}>{m.status}</Badge></td>
+                  <td className="px-4 py-3 text-right">
+                    <button onClick={() => deleteMember(m.id)} className="w-8 h-8 rounded-lg hover:bg-red-50 flex items-center justify-center text-ink-400 hover:text-brand-600 transition-colors"><Trash2 size={14} /></button>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+
+      <Modal open={showCreate} onClose={() => setShowCreate(false)} title="Create User" footer={<>
+        <button className="btn-secondary btn-md" onClick={() => setShowCreate(false)}>Cancel</button>
+        <button className="btn-primary btn-md" onClick={createUser} disabled={creating}>{creating ? 'Creating...' : 'Create'}</button>
+      </>}>
+        <div className="space-y-4">
+          <Field label="Full Name" value={name} onChange={setName} placeholder="e.g. Ahmed Al-Rashid" />
+          <Field label="Email" value={email} onChange={setEmail} placeholder="user@nexus.edu" type="email" />
+          <Field label="Password" value={password} onChange={setPassword} placeholder="Min 6 characters" type="password" />
+          <div>
+            <label className="text-xs font-medium text-ink-600 mb-1.5 block">Role</label>
+            <select value={role} onChange={(e) => setRole(e.target.value as Role)} className="input">
+              <option value="member">Member</option>
+              <option value="vice_team_leader">Vice Team Leader</option>
+              <option value="team_leader">Team Leader</option>
+              <option value="hr">HR</option>
+              <option value="director">Director</option>
+            </select>
+          </div>
+          <div>
+            <label className="text-xs font-medium text-ink-600 mb-1.5 block">Committee {role === 'director' || role === 'admin' ? '(optional)' : ''}</label>
+            <select value={committeeId} onChange={(e) => setCommitteeId(e.target.value)} className="input">
+              <option value="">No committee</option>
+              {committees.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+            </select>
+          </div>
+          <p className="text-xs text-ink-400">The user can immediately log in with these credentials after creation.</p>
+        </div>
+      </Modal>
+    </div>
+  );
+}
+
+// ===== DIRECTORS TAB =====
+function DirectorsTab() {
+  const { push } = useToast();
+  const { members, committees, directorAssignments } = useAuth();
+  const [directorId, setDirectorId] = useState('');
+  const [committeeId, setCommitteeId] = useState('');
+  const [refreshKey, setRefreshKey] = useState(0);
+  const refresh = () => setRefreshKey((k) => k + 1);
+
+  const assign = async () => {
+    if (!directorId || !committeeId) { push('error', 'Select director and committee'); return; }
+    const { error } = await supabase.from('director_committees').insert({ director_id: directorId, committee_id: committeeId });
+    if (error) { push('error', error.message); return; }
+    push('success', 'Director assigned to committee');
+    setCommitteeId(''); refresh();
+  };
+
+  const removeAssignment = async (id: string) => {
+    const { error } = await supabase.from('director_committees').delete().eq('id', id);
+    if (error) { push('error', error.message); return; }
+    push('success', 'Assignment removed'); refresh();
+  };
+
+  const directors = members.filter((m) => m.role === 'director');
+
+  return (
+    <div className="space-y-4">
+      <div className="card p-5">
+        <h3 className="font-semibold text-ink-900 mb-2">Director Assignments</h3>
+        <p className="text-sm text-ink-500 mb-4">Assign directors to supervise one or more committees. Directors can switch between their assigned workspaces.</p>
+
+        {directors.length === 0 && (
+          <div className="p-4 rounded-xl bg-ink-50 text-sm text-ink-500 mb-4">No directors yet. Create a user with the Director role in the Users tab first.</div>
+        )}
+
+        <div className="space-y-3 mb-4">
+          {directors.map((d) => {
+            const dComms = directorAssignments.filter((a) => a.director_id === d.id).map((a) => committees.find((c) => c.id === a.committee_id)).filter(Boolean);
+            return (
+              <div key={d.id} className="p-3 rounded-xl border border-ink-200">
+                <div className="flex items-center gap-3 mb-2">
+                  <Avatar src={d.avatar_url} name={d.name} size={36} />
+                  <div className="flex-1">
+                    <p className="text-sm font-semibold text-ink-900">{d.name}</p>
+                    <p className="text-xs text-ink-500">{d.position}</p>
+                  </div>
+                </div>
+                <div className="flex flex-wrap gap-1.5 ml-12">
+                  {dComms.length === 0 && <span className="text-xs text-ink-400">No committees assigned</span>}
+                  {dComms.map((c) => {
+                    const a = directorAssignments.find((x) => x.director_id === d.id && x.committee_id === c!.id);
+                    return (
+                      <span key={c!.id} className="chip bg-ink-100 text-ink-700 flex items-center gap-1.5">
+                        <span className="w-2 h-2 rounded-full" style={{ background: c!.color }} />
+                        {c!.name}
+                        <button onClick={() => a && removeAssignment(a.id)} className="text-ink-400 hover:text-brand-600"><X size={12} /></button>
+                      </span>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        <div className="flex gap-2 pt-4 border-t border-ink-100">
+          <select value={directorId} onChange={(e) => setDirectorId(e.target.value)} className="input flex-1">
+            <option value="">Select director...</option>
+            {directors.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
+          </select>
+          <select value={committeeId} onChange={(e) => setCommitteeId(e.target.value)} className="input flex-1">
+            <option value="">Select committee...</option>
+            {committees.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+          </select>
+          <button className="btn-primary btn-md" onClick={assign}><Plus size={14} /> Assign</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ===== ROLES TAB =====
+function RolesTab() {
+  const { members } = useAuth();
+  const roles: Role[] = ['admin', 'director', 'team_leader', 'vice_team_leader', 'hr', 'member'];
+
+  return (
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      {roles.map((r) => {
+        const count = members.filter((m) => m.role === r).length;
+        return (
+          <div key={r} className="card p-5">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <RoleBadge role={r} />
+                <span className="text-xs text-ink-400">{count} {count === 1 ? 'user' : 'users'}</span>
+              </div>
+            </div>
+            <ul className="space-y-1.5">
+              {ROLE_PERMISSIONS[r].map((p, i) => (
+                <li key={i} className="flex items-start gap-2 text-sm text-ink-600">
+                  <span className="w-1 h-1 rounded-full bg-ink-400 mt-2 shrink-0" />
+                  {p}
+                </li>
+              ))}
+            </ul>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
