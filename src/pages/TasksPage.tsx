@@ -1,77 +1,52 @@
-import { useMemo, useState } from 'react';
-import { ClipboardList, Search, ExternalLink, FileUp, FileText, Clock, CheckCircle2, XCircle, AlertCircle, ArrowLeft, Send, CalendarDays } from 'lucide-react';
+import { useMemo, useState, useEffect } from 'react';
+import { ClipboardList, Search, ExternalLink, Clock, ArrowLeft, CalendarDays, GraduationCap, Award, StickyNote } from 'lucide-react';
 import { Link, Breadcrumbs } from '../components/Router';
-import { Badge, SubmissionTypeBadge, SectionHeader, EmptyState, formatDate, daysUntil, Progress, Avatar } from '../components/ui';
+import { Badge, SubmissionTypeBadge, SectionHeader, EmptyState, formatDate, daysUntil, Avatar, Modal } from '../components/ui';
 import { useAuth } from '../lib/auth';
-import { useTasks, useSessions, useTaskSubmissions, useMembers, useCommittees } from '../lib/hooks';
+import { useTasks, useSessions, useTaskGrades, useMembers } from '../lib/hooks';
 import { supabase } from '../lib/supabase';
 import { useToast } from '../components/Toast';
+import type { TaskGrade } from '../lib/supabase';
+
+const GRADING_ROLES = ['admin', 'team_leader', 'vice_team_leader', 'hr'];
 
 export function TasksPage() {
   const { data: tasks } = useTasks();
   const { data: sessions } = useSessions();
-  const { data: submissions } = useTaskSubmissions();
   const { profile } = useAuth();
   const [q, setQ] = useState('');
-  const [status, setStatus] = useState<'all' | 'open' | 'submitted' | 'late' | 'missing'>('all');
 
-  const mySubs = submissions.filter((s) => s.member_id === profile?.id);
   const filtered = tasks.filter((t) => t.title.toLowerCase().includes(q.toLowerCase()));
-
-  const statusOf = (taskId: string, deadline: string) => {
-    const sub = mySubs.find((s) => s.task_id === taskId);
-    if (sub?.submitted_at) return 'submitted';
-    if (daysUntil(deadline) < 0) return 'late';
-    return 'open';
-  };
-
-  const visible = filtered.filter((t) => {
-    if (status === 'all') return true;
-    const st = statusOf(t.id, t.deadline);
-    return st === status || (status === 'missing' && st === 'late');
-  });
 
   return (
     <div className="space-y-5">
       <Breadcrumbs items={[{ label: 'Workspace', to: '/dashboard' }, { label: 'Tasks' }]} />
       <SectionHeader title="Tasks" description="Educational assignments from your sessions" />
-      <div className="flex flex-wrap items-center gap-3">
-        <div className="relative flex-1 min-w-[200px] max-w-sm">
-          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-400" />
-          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search tasks..." className="input !pl-9" />
-        </div>
-        <select value={status} onChange={(e) => setStatus(e.target.value as any)} className="input !w-auto">
-          <option value="all">All status</option>
-          <option value="open">Open</option>
-          <option value="submitted">Submitted</option>
-          <option value="late">Late</option>
-          <option value="missing">Missing</option>
-        </select>
+      <div className="relative flex-1 min-w-[200px] max-w-sm">
+        <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-400" />
+        <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search tasks..." className="input !pl-9" />
       </div>
 
-      {visible.length === 0 ? (
-        <div className="card"><EmptyState icon={<ClipboardList size={22} />} title="No tasks found" description="Try a different filter." /></div>
+      {filtered.length === 0 ? (
+        <div className="card"><EmptyState icon={<ClipboardList size={22} />} title="No tasks found" description="Try a different search." /></div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-          {visible.map((t) => {
+          {filtered.map((t) => {
             const session = sessions.find((s) => s.id === t.session_id);
-            const st = statusOf(t.id, t.deadline);
-            const sub = mySubs.find((s) => s.task_id === t.id);
             return (
               <Link key={t.id} to={`/tasks/${t.id}`} className="card card-hover p-5 block group">
                 <div className="flex items-center justify-between mb-2">
                   <SubmissionTypeBadge type={t.submission_type} />
-                  <StatusChip status={st} />
+                  <DeadlineChip deadline={t.deadline} />
                 </div>
                 <h3 className="font-semibold text-ink-900 group-hover:text-brand-700 transition-colors">{t.title}</h3>
                 <p className="text-sm text-ink-500 mt-1 line-clamp-2">{t.description ?? ''}</p>
-                {session && <p className="text-xs text-ink-400 mt-2">From: {session.title}</p>}
-                <div className="flex items-center justify-between mt-3 pt-3 border-t border-ink-100">
-                  <span className={`text-xs flex items-center gap-1 ${daysUntil(t.deadline) < 0 ? 'text-brand-600' : daysUntil(t.deadline) <= 2 ? 'text-amber-600' : 'text-ink-500'}`}>
-                    <Clock size={12} /> {daysUntil(t.deadline) < 0 ? `${-daysUntil(t.deadline)}d overdue` : daysUntil(t.deadline) === 0 ? 'Due today' : `${daysUntil(t.deadline)}d left`}
-                  </span>
-                  {sub?.score !== undefined && sub.submitted_at && <span className="text-xs font-semibold text-mint-500">Scored {sub.score}</span>}
-                </div>
+                {session && (
+                  <div className="flex items-center gap-1.5 mt-3 text-xs text-ink-500">
+                    <CalendarDays size={12} />
+                    <span className="font-medium text-ink-600">{session.title}</span>
+                  </div>
+                )}
               </Link>
             );
           })}
@@ -81,45 +56,42 @@ export function TasksPage() {
   );
 }
 
-function StatusChip({ status }: { status: string }) {
-  const map: Record<string, { tone: 'mint' | 'blue' | 'amber' | 'red'; icon: React.ReactNode; label: string }> = {
-    open: { tone: 'blue', icon: <Clock size={11} />, label: 'Open' },
-    submitted: { tone: 'mint', icon: <CheckCircle2 size={11} />, label: 'Submitted' },
-    late: { tone: 'red', icon: <AlertCircle size={11} />, label: 'Late' },
-    missing: { tone: 'amber', icon: <XCircle size={11} />, label: 'Missing' },
-  };
-  const s = map[status] ?? map.open;
-  return <Badge tone={s.tone}>{s.icon} {s.label}</Badge>;
+function DeadlineChip({ deadline }: { deadline: string }) {
+  const d = daysUntil(deadline);
+  const color = d < 0 ? 'text-brand-600' : d <= 2 ? 'text-amber-600' : 'text-ink-500';
+  return (
+    <span className={`text-xs flex items-center gap-1 ${color}`}>
+      <Clock size={12} />
+      {d < 0 ? `${-d}d overdue` : d === 0 ? 'Due today' : `${d}d left`}
+    </span>
+  );
 }
 
 export function TaskDetailsPage({ id }: { id: string }) {
   const { data: tasks } = useTasks();
   const { data: sessions } = useSessions();
-  const { data: submissions } = useTaskSubmissions();
+  const { data: grades } = useTaskGrades();
   const { data: members } = useMembers();
-  const { data: committees } = useCommittees();
-  const { profile, role } = useAuth();
+  const { profile, activeCommittee } = useAuth();
+
+const role = profile?.role ?? "member";
   const { push } = useToast();
-  const [link, setLink] = useState('');
+  const [gradingOpen, setGradingOpen] = useState(false);
+
 
   const task = tasks.find((t) => t.id === id);
   const session = sessions.find((s) => s.id === task?.session_id);
-  const mySub = submissions.find((s) => s.task_id === id && s.member_id === profile?.id);
-  const taskSubs = submissions.filter((s) => s.task_id === id);
+  const taskGrades = grades.filter((g) => g.task_id === id);
+
+    const canGrade = GRADING_ROLES.includes(role);
+
+  const committeeMembers = useMemo(() => {
+    if (!activeCommittee) return [];
+    return members.filter((m) => m.committee_id === activeCommittee.id && m.role === 'member');
+  }, [members, activeCommittee]);
 
   if (!task) return <div className="card"><EmptyState icon={<ClipboardList size={22} />} title="Task not found" description="This task may have been removed." action={<Link to="/tasks" className="btn-primary btn-md">Back to tasks</Link>} /></div>;
 
-  const submit = async () => {
-    if (!profile) return;
-    const payload = { task_id: id, member_id: profile.id, submitted_at: new Date().toISOString(), link: link || null };
-    const { error } = await supabase.from('task_submissions').upsert(payload, { onConflict: 'task_id,member_id' });
-    if (error) { push('error', error.message); return; }
-    push('success', 'Submission recorded');
-    setLink('');
-  };
-
-  const isGoogleForm = task.submission_type === 'google_form';
-  const submissionUrl = task.submission_url;
 
   return (
     <div className="space-y-5">
@@ -140,36 +112,19 @@ export function TaskDetailsPage({ id }: { id: string }) {
             </div>
           </div>
 
-          {/* Submission section */}
+          {/* Submission section - read-only for members */}
           <div className="card p-6">
             <h3 className="font-semibold text-ink-900 mb-4">Submission</h3>
-            {mySub?.submitted_at ? (
-              <div className="p-4 rounded-xl bg-mint-50 border border-mint-200/60 flex items-center gap-3">
-                <CheckCircle2 size={20} className="text-mint-500" />
-                <div className="flex-1">
-                  <p className="text-sm font-medium text-ink-800">Submitted on {formatDate(mySub.submitted_at, { dateStyle: 'medium' })}</p>
-                  {mySub.link && <a href={mySub.link} target="_blank" rel="noreferrer" className="text-xs text-brand-600 hover:underline">{mySub.link}</a>}
-                </div>
-                <Badge tone="mint">Scored {mySub.score}{mySub.bonus ? ` +${mySub.bonus}` : ''}</Badge>
-              </div>
-            ) : isGoogleForm && submissionUrl ? (
+            {task.submission_url ? (
               <div className="text-center py-6">
-                <div className="w-14 h-14 rounded-2xl bg-blue-50 flex items-center justify-center mx-auto mb-3"><FileText size={26} className="text-blue-600" /></div>
-                <p className="text-sm text-ink-600 mb-4">This task uses a Google Form. Click to open and submit your answers.</p>
-                <a href={submissionUrl} target="_blank" rel="noreferrer" className="btn-primary btn-lg">
+                <div className="w-14 h-14 rounded-2xl bg-blue-50 flex items-center justify-center mx-auto mb-3"><ExternalLink size={26} className="text-blue-600" /></div>
+                <p className="text-sm text-ink-600 mb-4">Click the link below to open the submission form and submit your answers.</p>
+                <a href={task.submission_url} target="_blank" rel="noreferrer" className="btn-primary btn-lg">
                   <ExternalLink size={16} /> Open Submission
                 </a>
               </div>
             ) : (
-              <div className="space-y-3">
-                {task.submission_type === 'file_upload' && (
-                  <label className="flex flex-col items-center justify-center gap-2 h-28 rounded-xl border-2 border-dashed border-ink-200 hover:border-brand-300 hover:bg-brand-50/30 cursor-pointer transition-all text-sm text-ink-500">
-                    <FileUp size={22} /><span>Click to upload your file</span>
-                  </label>
-                )}
-                <input value={link} onChange={(e) => setLink(e.target.value)} placeholder={task.submission_type === 'external_link' ? 'Paste your link here' : 'Paste submission link (optional)'} className="input" />
-                <button className="btn-primary btn-md w-full" onClick={submit}><Send size={14} /> Submit</button>
-              </div>
+              <p className="text-sm text-ink-500">No submission link provided.</p>
             )}
           </div>
         </div>
@@ -180,37 +135,173 @@ export function TaskDetailsPage({ id }: { id: string }) {
             <dl className="space-y-3 text-sm">
               <Row label="Type"><SubmissionTypeBadge type={task.submission_type} /></Row>
               <Row label="Deadline"><span className="text-ink-800 font-medium">{formatDate(task.deadline, { dateStyle: 'medium' })}</span></Row>
-              <Row label="Status">{mySub?.submitted_at ? <Badge tone="mint">Submitted</Badge> : daysUntil(task.deadline) < 0 ? <Badge tone="red">Late</Badge> : <Badge tone="blue">Open</Badge>}</Row>
-              {session && <Row label="Session"><span className="text-ink-800">{session.title}</span></Row>}
+              <Row label="Session">
+                {session ? (
+                  <span className="text-ink-800 font-medium">{session.title}</span>
+                ) : (
+                  <span className="text-ink-400">No session</span>
+                )}
+              </Row>
             </dl>
           </div>
 
-          {/* Leader/HR view: submissions across members */}
-          {['admin', 'director', 'team_leader', 'vice_team_leader', 'hr'].includes(role) && (
+          {/* Grading button for leaders */}
+          {canGrade && (
             <div className="card p-5">
-              <h3 className="font-semibold text-ink-900 mb-3">Submissions ({taskSubs.length})</h3>
-              <div className="space-y-2 max-h-80 overflow-y-auto">
-                {taskSubs.map((s) => {
-                  const m = members.find((x) => x.id === s.member_id);
-                  if (!m) return null;
-                  return (
-                    <div key={s.id} className="flex items-center gap-2 p-2 rounded-lg hover:bg-ink-50 transition-colors">
-                      <Avatar src={m.avatar_url} name={m.name} size={26} />
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-ink-800 truncate">{m.name}</p>
-                        <p className="text-xs text-ink-500">{s.submitted_at ? formatDate(s.submitted_at, { dateStyle: 'medium' }) : 'Not submitted'}</p>
-                      </div>
-                      {s.submitted_at && <Badge tone="mint">{s.score}{s.bonus ? ` +${s.bonus}` : ''}</Badge>}
-                    </div>
-                  );
-                })}
-                {taskSubs.length === 0 && <p className="text-sm text-ink-500">No submissions yet.</p>}
-              </div>
+              <h3 className="font-semibold text-ink-900 mb-3">Evaluation</h3>
+              <p className="text-sm text-ink-500 mb-4">Grade this task by assigning points, bonus, and notes for each member of your committee.</p>
+              <button className="btn-primary btn-md w-full" onClick={() => setGradingOpen(true)}>
+                <GraduationCap size={16} /> Grade Task
+              </button>
+              {taskGrades.length > 0 && (
+                <p className="text-xs text-mint-500 mt-3 flex items-center gap-1">
+                  <Award size={12} /> {taskGrades.length} member{taskGrades.length === 1 ? '' : 's'} graded
+                </p>
+              )}
             </div>
           )}
         </div>
       </div>
+
+      {canGrade && (
+        <GradingModal
+          open={gradingOpen}
+          onClose={() => setGradingOpen(false)}
+          taskId={id}
+          taskTitle={task.title}
+          members={committeeMembers}
+          existingGrades={taskGrades}
+          push={push}
+        />
+      )}
     </div>
+  );
+}
+
+interface GradeEntry {
+  points: string;
+  bonus: string;
+  leader_note: string;
+}
+
+function GradingModal({ open, onClose, taskId, taskTitle, members, existingGrades, push }: {
+  open: boolean;
+  onClose: () => void;
+  taskId: string;
+  taskTitle: string;
+  members: { id: string; name: string; avatar_url: string | null }[];
+  existingGrades: TaskGrade[];
+  push: (t: 'success' | 'error' | 'info', m: string) => void;
+}) {
+  const [entries, setEntries] = useState<Record<string, GradeEntry>>({});
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (!open) return;
+    const next: Record<string, GradeEntry> = {};
+    for (const m of members) {
+      const existing = existingGrades.find((g) => g.member_id === m.id);
+      next[m.id] = {
+        points: existing ? String(existing.points) : '0',
+        bonus: existing ? String(existing.bonus) : '0',
+        leader_note: existing?.leader_note ?? '',
+      };
+    }
+    setEntries(next);
+  }, [open, members, existingGrades]);
+
+  const updateField = (memberId: string, field: keyof GradeEntry, value: string) => {
+    setEntries((prev) => ({ ...prev, [memberId]: { ...prev[memberId], [field]: value } }));
+  };
+
+  const save = async () => {
+    setSaving(true);
+    const rows = members.map((m) => {
+      const e = entries[m.id] ?? { points: '0', bonus: '0', leader_note: '' };
+      return {
+        task_id: taskId,
+        member_id: m.id,
+        points: Math.max(0, parseInt(e.points) || 0),
+        bonus: Math.max(0, parseInt(e.bonus) || 0),
+        leader_note: e.leader_note,
+      };
+    });
+
+    const { error } = await supabase
+      .from('task_grades')
+      .upsert(rows, { onConflict: 'task_id,member_id' });
+
+    setSaving(false);
+    if (error) { push('error', error.message); return; }
+    push('success', 'Scores saved');
+    onClose();
+  };
+
+  return (
+    <Modal
+      open={open}
+      onClose={onClose}
+      title={`Grade: ${taskTitle}`}
+      width="max-w-2xl"
+      footer={<>
+        <button className="btn-secondary btn-md" onClick={onClose}>Cancel</button>
+        <button className="btn-primary btn-md" onClick={save} disabled={saving}>
+          {saving ? 'Saving...' : 'Save Scores'}
+        </button>
+      </>}
+    >
+      {members.length === 0 ? (
+        <p className="text-sm text-ink-500 text-center py-8">No members in this committee to grade.</p>
+      ) : (
+        <div className="space-y-4">
+          {members.map((m) => {
+            const e = entries[m.id] ?? { points: '0', bonus: '0', leader_note: '' };
+            return (
+              <div key={m.id} className="p-4 rounded-xl border border-ink-200/70 bg-ink-50/30">
+                <div className="flex items-center gap-2 mb-3">
+                  <Avatar src={m.avatar_url} name={m.name} size={32} />
+                  <span className="font-medium text-ink-800">{m.name}</span>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-medium text-ink-600 mb-1">Points</label>
+                    <input
+                      type="number"
+                      min="0"
+                      value={e.points}
+                      onChange={(ev) => updateField(m.id, 'points', ev.target.value)}
+                      className="input"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-ink-600 mb-1">Bonus</label>
+                    <input
+                      type="number"
+                      min="0"
+                      value={e.bonus}
+                      onChange={(ev) => updateField(m.id, 'bonus', ev.target.value)}
+                      className="input"
+                    />
+                  </div>
+                </div>
+                <div className="mt-3">
+                  <label className="block text-xs font-medium text-ink-600 mb-1 flex items-center gap-1">
+                    <StickyNote size={11} /> Leader Note
+                  </label>
+                  <textarea
+                    rows={2}
+                    value={e.leader_note}
+                    onChange={(ev) => updateField(m.id, 'leader_note', ev.target.value)}
+                    placeholder="Optional feedback..."
+                    className="input !h-auto py-2 resize-none"
+                  />
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </Modal>
   );
 }
 
