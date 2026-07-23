@@ -96,9 +96,9 @@ export function DashboardPage() {
               <div className="flex items-center gap-1.5 text-xs text-ink-500 mt-3">
                 <CalendarDays size={13} /> {formatDate(nextSession.publish_date, { dateStyle: 'medium' })}
               </div>
-              {nextSession.video_url && (
-                <a href={nextSession.video_url} target="_blank" rel="noreferrer" className="btn-primary btn-sm mt-3 w-full">
-                  <Video size={14} /> Watch session
+              {nextSession.drive_folder_url && (
+                <a href={nextSession.drive_folder_url} target="_blank" rel="noreferrer" className="btn-primary btn-sm mt-3 w-full">
+                  <Video size={14} /> Open Drive Folder
                 </a>
               )}
             </>

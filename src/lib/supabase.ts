@@ -32,7 +32,8 @@ export interface DirectorCommittee {
 
 export interface Session {
   id: string; title: string; description: string | null;
-  video_url: string | null; publish_date: string; committee_id: string;
+  drive_folder_url: string | null; publish_date: string; committee_id: string;
+  is_locked: boolean;
 }
 
 export interface Task {
