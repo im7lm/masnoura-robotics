@@ -89,7 +89,7 @@ export function useSessions(): QueryResult<Session> {
     } else if (role !== 'admin' && activeCommittee) {
       q = q.eq('committee_id', activeCommittee.id);
     }
-    const { data, error } = await q.order('publish_date', { ascending: false });
+    const { data, error } = await q.order('end_date', { ascending: false });
     return { data: data as Session[] | null, error: error as { message: string } | null };
   }, [role, activeCommittee?.id, directorAssignments, profile?.id]);
 }

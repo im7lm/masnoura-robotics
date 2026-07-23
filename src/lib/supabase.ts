@@ -32,14 +32,14 @@ export interface DirectorCommittee {
 
 export interface Session {
   id: string; title: string; description: string | null;
-  drive_folder_url: string | null; publish_date: string; committee_id: string;
+  drive_folder_url: string | null; end_date: string; committee_id: string;
   is_locked: boolean;
 }
 
 export interface Task {
   id: string; session_id: string | null; title: string; description: string | null;
   deadline: string; submission_type: SubmissionType; submission_url: string | null;
-  committee_id: string;
+  committee_id: string; document_url: string | null;
 }
 
 export interface Quiz {

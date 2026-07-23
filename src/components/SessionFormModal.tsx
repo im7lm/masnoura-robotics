@@ -18,7 +18,7 @@ export function SessionFormModal({ open, onClose, onSaved, session }: SessionFor
   const { push } = useToast();
   const [title, setTitle] = useState('');
   const [desc, setDesc] = useState('');
-  const [publishDate, setPublishDate] = useState('');
+  const [endDate, setEndDate] = useState('');
   const [driveFolderUrl, setDriveFolderUrl] = useState('');
   const [isLocked, setIsLocked] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -30,11 +30,11 @@ export function SessionFormModal({ open, onClose, onSaved, session }: SessionFor
     if (session) {
       setTitle(session.title);
       setDesc(session.description ?? '');
-      setPublishDate(session.publish_date ? session.publish_date.slice(0, 10) : '');
+      setEndDate(session.end_date ? session.end_date.slice(0, 10) : '');
       setDriveFolderUrl(session.drive_folder_url ?? '');
       setIsLocked(session.is_locked);
     } else {
-      setTitle(''); setDesc(''); setPublishDate(''); setDriveFolderUrl(''); setIsLocked(false);
+      setTitle(''); setDesc(''); setEndDate(''); setDriveFolderUrl(''); setIsLocked(false);
     }
   }, [open, session]);
 
@@ -45,7 +45,7 @@ export function SessionFormModal({ open, onClose, onSaved, session }: SessionFor
     const payload = {
       title,
       description: desc || null,
-      publish_date: publishDate || new Date().toISOString().slice(0, 10),
+      end_date: endDate || new Date().toISOString().slice(0, 10),
       drive_folder_url: driveFolderUrl || null,
       is_locked: isLocked,
       committee_id: activeCommittee.id,
@@ -86,7 +86,7 @@ export function SessionFormModal({ open, onClose, onSaved, session }: SessionFor
 
         <Field label="Title" value={title} onChange={setTitle} placeholder="Session title" />
         <Field label="Description" value={desc} onChange={setDesc} placeholder="What is this session about?" textarea />
-        <Field label="Publish Date" value={publishDate} onChange={setPublishDate} type="date" />
+        <Field label="End Date" value={endDate} onChange={setEndDate} type="date" />
         <Field label="Drive Folder URL" value={driveFolderUrl} onChange={setDriveFolderUrl} placeholder="https://drive.google.com/..." />
 
         {/* Visibility toggle */}

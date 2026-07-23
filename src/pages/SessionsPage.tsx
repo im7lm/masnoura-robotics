@@ -2,6 +2,7 @@ import { useState } from 'react';
 import {
   Video, CalendarDays, ClipboardList, Star, Search,
   FolderOpen, Lock, Unlock, ArrowLeft, Pencil, Trash2, ExternalLink, AlertTriangle,
+  Clock, History,
 } from 'lucide-react';
 import { Link, Breadcrumbs, useRouter } from '../components/Router';
 import { Badge, SectionHeader, EmptyState, formatDate, Modal } from '../components/ui';
@@ -13,6 +14,12 @@ import { SessionFormModal } from '../components/SessionFormModal';
 import type { Session } from '../lib/supabase';
 
 const MANAGE_ROLES = ['admin', 'director', 'team_leader', 'vice_team_leader'];
+
+function isExpired(endDate: string) {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return new Date(endDate) < today;
+}
 
 export function SessionsPage() {
   const { data: sessions, refetch } = useSessions();
@@ -26,17 +33,23 @@ export function SessionsPage() {
 
   const filtered = sessions.filter((s) => s.title.toLowerCase().includes(q.toLowerCase()));
 
-  // Sort: unlocked first (newest → oldest), then locked (newest → oldest)
-  const available = [...filtered.filter((s) => !s.is_locked)].sort(
-    (a, b) => +new Date(b.publish_date) - +new Date(a.publish_date),
-  );
-  const locked = [...filtered.filter((s) => s.is_locked)].sort(
-    (a, b) => +new Date(b.publish_date) - +new Date(a.publish_date),
-  );
-  const sorted = [...available, ...locked];
+  const current = filtered
+    .filter((s) => !s.is_locked && !isExpired(s.end_date))
+    .sort((a, b) => +new Date(b.end_date) - +new Date(a.end_date));
+
+  const upcoming = filtered
+    .filter((s) => s.is_locked)
+    .sort((a, b) => +new Date(b.end_date) - +new Date(a.end_date));
+
+  const previous = filtered
+    .filter((s) => !s.is_locked && isExpired(s.end_date))
+    .sort((a, b) => +new Date(b.end_date) - +new Date(a.end_date));
+
+  const taskCountFor = (id: string) => tasks.filter((t) => t.session_id === id).length;
+  const quizCountFor = (id: string) => quizzes.filter((qz) => qz.session_id === id).length;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       <Breadcrumbs items={[{ label: 'Workspace', to: '/dashboard' }, { label: 'Sessions' }]} />
       <SectionHeader title="Sessions" description="Learning sessions with resources, tasks and quizzes" />
 
@@ -45,7 +58,7 @@ export function SessionsPage() {
         <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search sessions..." className="input !pl-9" />
       </div>
 
-      {sorted.length === 0 ? (
+      {sessions.length === 0 ? (
         <div className="card">
           <EmptyState
             icon={<Video size={22} />}
@@ -54,22 +67,94 @@ export function SessionsPage() {
           />
         </div>
       ) : (
+        <div className="space-y-10">
+          {/* Current Sessions */}
+          <SessionSection
+            icon={<Unlock size={16} className="text-mint-600" />}
+            title="Current Sessions"
+            accent="bg-mint-500"
+            emptyMessage="No current sessions."
+            sessions={current}
+            taskCountFor={taskCountFor}
+            quizCountFor={quizCountFor}
+            canManage={canManage}
+            role={role}
+            refetch={refetch}
+          />
+
+          {/* Upcoming / Locked */}
+          {upcoming.length > 0 && (
+            <SessionSection
+              icon={<Lock size={16} className="text-amber-600" />}
+              title="Upcoming Sessions"
+              accent="bg-amber-400"
+              emptyMessage=""
+              sessions={upcoming}
+              taskCountFor={taskCountFor}
+              quizCountFor={quizCountFor}
+              canManage={canManage}
+              role={role}
+              refetch={refetch}
+            />
+          )}
+
+          {/* Previous Sessions */}
+          {previous.length > 0 && (
+            <SessionSection
+              icon={<History size={16} className="text-ink-500" />}
+              title="Previous Sessions"
+              accent="bg-ink-300"
+              emptyMessage=""
+              sessions={previous}
+              taskCountFor={taskCountFor}
+              quizCountFor={quizCountFor}
+              canManage={canManage}
+              role={role}
+              refetch={refetch}
+            />
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function SessionSection({ icon, title, accent, emptyMessage, sessions, taskCountFor, quizCountFor, canManage, role, refetch }: {
+  icon: React.ReactNode;
+  title: string;
+  accent: string;
+  emptyMessage: string;
+  sessions: Session[];
+  taskCountFor: (id: string) => number;
+  quizCountFor: (id: string) => number;
+  canManage: boolean;
+  role: string;
+  refetch: () => void;
+}) {
+  return (
+    <div>
+      <div className="flex items-center gap-2.5 mb-4">
+        <span className={`w-1 h-5 rounded-full ${accent}`} />
+        <span className="flex items-center gap-1.5 text-sm font-semibold text-ink-700">
+          {icon} {title}
+        </span>
+        <span className="text-xs text-ink-400 font-normal">({sessions.length})</span>
+      </div>
+      {sessions.length === 0 && emptyMessage ? (
+        <p className="text-sm text-ink-400 pl-4">{emptyMessage}</p>
+      ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-          {sorted.map((s) => {
-            const sessionTasks = tasks.filter((t) => t.session_id === s.id);
-            const sessionQuizzes = quizzes.filter((qz) => qz.session_id === s.id);
-            return (
-              <SessionCard
-                key={s.id}
-                session={s}
-                taskCount={sessionTasks.length}
-                quizCount={sessionQuizzes.length}
-                canManage={canManage}
-                role={role}
-                refetch={refetch}
-              />
-            );
-          })}
+          {sessions.map((s) => (
+            <SessionCard
+              key={s.id}
+              session={s}
+              taskCount={taskCountFor(s.id)}
+              quizCount={quizCountFor(s.id)}
+              canManage={canManage}
+              role={role}
+              refetch={refetch}
+            />
+          ))}
         </div>
       )}
     </div>
@@ -85,6 +170,7 @@ function SessionCard({ session, taskCount, quizCount, canManage, role, refetch }
   const [deleteOpen, setDeleteOpen] = useState(false);
 
   const isMemberLocked = session.is_locked && !MANAGE_ROLES.includes(role);
+  const expired = isExpired(session.end_date);
 
   const handleDelete = async () => {
     const { error } = await supabase.from('sessions').delete().eq('id', session.id);
@@ -97,25 +183,23 @@ function SessionCard({ session, taskCount, quizCount, canManage, role, refetch }
   return (
     <div className={`card group flex flex-col transition-all duration-200 ${!isMemberLocked ? 'card-hover' : 'opacity-80'}`}>
       {/* Colored top accent */}
-      <div className={`h-1 w-full rounded-t-2xl ${session.is_locked ? 'bg-amber-400' : 'bg-mint-500'}`} />
+      <div className={`h-1 w-full rounded-t-2xl ${session.is_locked ? 'bg-amber-400' : expired ? 'bg-ink-300' : 'bg-mint-500'}`} />
 
       <div className="p-5 flex flex-col flex-1">
         {/* Header row */}
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-1.5 flex-wrap">
             {session.is_locked ? (
-              <Badge tone="amber">
-                <Lock size={10} className="mr-0.5" /> Locked
-              </Badge>
+              <Badge tone="amber"><Lock size={10} className="mr-0.5" /> Locked</Badge>
+            ) : expired ? (
+              <Badge tone="neutral"><Clock size={10} className="mr-0.5" /> Ended</Badge>
             ) : (
-              <Badge tone="mint">
-                <Unlock size={10} className="mr-0.5" /> Available
-              </Badge>
+              <Badge tone="mint"><Unlock size={10} className="mr-0.5" /> Available</Badge>
             )}
           </div>
           <span className="text-xs text-ink-400 flex items-center gap-1">
             <CalendarDays size={12} />
-            {formatDate(session.publish_date, { day: 'numeric', month: 'short', year: 'numeric' })}
+            {formatDate(session.end_date, { day: 'numeric', month: 'short', year: 'numeric' })}
           </span>
         </div>
 
@@ -153,7 +237,7 @@ function SessionCard({ session, taskCount, quizCount, canManage, role, refetch }
           )}
         </div>
 
-        {/* CTA / Locked state */}
+        {/* CTA */}
         <div className="mt-3">
           {isMemberLocked ? (
             <div className="flex items-center gap-1.5 text-xs text-amber-600 bg-amber-50 rounded-lg px-3 py-2">
@@ -161,33 +245,22 @@ function SessionCard({ session, taskCount, quizCount, canManage, role, refetch }
             </div>
           ) : (
             <div className="flex items-center gap-2">
-              <Link
-                to={`/sessions/${session.id}`}
-                className="btn-primary btn-sm flex-1 justify-center"
-              >
+              <Link to={`/sessions/${session.id}`} className="btn-primary btn-sm flex-1 justify-center">
                 Open Session
               </Link>
               {canManage && (
                 <>
-                  <button
-                    onClick={() => setEditOpen(true)}
-                    className="btn-ghost btn-sm !px-2.5"
-                    title="Edit"
-                  >
+                  <button onClick={() => setEditOpen(true)} className="btn-ghost btn-sm !px-2.5" title="Edit">
                     <Pencil size={14} />
                   </button>
-                  <button
-                    onClick={() => setDeleteOpen(true)}
-                    className="btn-ghost btn-sm !px-2.5 text-brand-600 hover:bg-brand-50"
-                    title="Delete"
-                  >
+                  <button onClick={() => setDeleteOpen(true)} className="btn-ghost btn-sm !px-2.5 text-brand-600 hover:bg-brand-50" title="Delete">
                     <Trash2 size={14} />
                   </button>
                 </>
               )}
             </div>
           )}
-          {/* Leaders can still access locked sessions */}
+          {/* Leaders can always access locked sessions */}
           {/* {session.is_locked && canManage && (
             <div className="flex items-center gap-2 mt-2">
               <Link to={`/sessions/${session.id}`} className="btn-secondary btn-sm flex-1 justify-center text-xs">
@@ -213,9 +286,7 @@ function SessionCard({ session, taskCount, quizCount, canManage, role, refetch }
         footer={
           <>
             <button className="btn-secondary btn-md" onClick={() => setDeleteOpen(false)}>Cancel</button>
-            <button className="btn-md bg-brand-600 text-white hover:bg-brand-700 rounded-lg font-medium transition-colors" onClick={handleDelete}>
-              Delete
-            </button>
+            <button className="btn-md bg-brand-600 text-white hover:bg-brand-700 rounded-lg font-medium transition-colors" onClick={handleDelete}>Delete</button>
           </>
         }
       >
@@ -279,6 +350,8 @@ export function SessionDetailsPage({ id }: { id: string }) {
     );
   }
 
+  const expired = isExpired(session.end_date);
+
   const handleDelete = async () => {
     const { error } = await supabase.from('sessions').delete().eq('id', session.id);
     if (error) { push('error', error.message); return; }
@@ -297,18 +370,20 @@ export function SessionDetailsPage({ id }: { id: string }) {
 
       {/* Hero card */}
       <div className="card overflow-hidden">
-        <div className={`h-1.5 w-full ${session.is_locked ? 'bg-amber-400' : 'bg-mint-500'}`} />
+        <div className={`h-1.5 w-full ${session.is_locked ? 'bg-amber-400' : expired ? 'bg-ink-300' : 'bg-mint-500'}`} />
         <div className="p-6 sm:p-8">
           <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
             <div className="flex-1">
               <div className="flex items-center gap-2 mb-3 flex-wrap">
                 {session.is_locked ? (
                   <Badge tone="amber"><Lock size={10} className="mr-0.5" /> Locked</Badge>
+                ) : expired ? (
+                  <Badge tone="neutral"><Clock size={10} className="mr-0.5" /> Ended</Badge>
                 ) : (
                   <Badge tone="mint"><Unlock size={10} className="mr-0.5" /> Available</Badge>
                 )}
                 <span className="text-xs text-ink-400 flex items-center gap-1">
-                  <CalendarDays size={12} /> {formatDate(session.publish_date, { dateStyle: 'full' })}
+                  <CalendarDays size={12} /> Ends {formatDate(session.end_date, { dateStyle: 'full' })}
                 </span>
               </div>
               <h1 className="text-2xl font-semibold text-ink-900 tracking-tight leading-snug">{session.title}</h1>
@@ -317,7 +392,6 @@ export function SessionDetailsPage({ id }: { id: string }) {
               )}
             </div>
 
-            {/* Manage actions */}
             {canManage && (
               <div className="flex items-center gap-2 shrink-0">
                 <button className="btn-secondary btn-sm" onClick={() => setEditOpen(true)}>
@@ -357,7 +431,6 @@ export function SessionDetailsPage({ id }: { id: string }) {
 
       {/* Tasks + Quizzes */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {/* Tasks */}
         <div className="card p-5">
           <h3 className="font-semibold text-ink-900 flex items-center gap-2 mb-4">
             <span className="w-7 h-7 rounded-lg bg-blue-50 flex items-center justify-center">
@@ -365,9 +438,7 @@ export function SessionDetailsPage({ id }: { id: string }) {
             </span>
             Tasks
             {sessionTasks.length > 0 && (
-              <span className="ml-auto text-xs font-medium text-ink-400 bg-ink-100 rounded-full px-2 py-0.5">
-                {sessionTasks.length}
-              </span>
+              <span className="ml-auto text-xs font-medium text-ink-400 bg-ink-100 rounded-full px-2 py-0.5">{sessionTasks.length}</span>
             )}
           </h3>
           {sessionTasks.length === 0 ? (
@@ -387,12 +458,8 @@ export function SessionDetailsPage({ id }: { id: string }) {
                     <ClipboardList size={14} className="text-blue-600" />
                   </span>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-ink-800 group-hover/item:text-brand-700 transition-colors truncate">
-                      {t.title}
-                    </p>
-                    <p className="text-xs text-ink-400 mt-0.5">
-                      Due {formatDate(t.deadline, { dateStyle: 'medium' })}
-                    </p>
+                    <p className="text-sm font-medium text-ink-800 group-hover/item:text-brand-700 transition-colors truncate">{t.title}</p>
+                    <p className="text-xs text-ink-400 mt-0.5">Due {formatDate(t.deadline, { dateStyle: 'medium' })}</p>
                   </div>
                   <ExternalLink size={13} className="text-ink-300 group-hover/item:text-brand-500 transition-colors shrink-0" />
                 </Link>
@@ -401,7 +468,6 @@ export function SessionDetailsPage({ id }: { id: string }) {
           )}
         </div>
 
-        {/* Quizzes */}
         <div className="card p-5">
           <h3 className="font-semibold text-ink-900 flex items-center gap-2 mb-4">
             <span className="w-7 h-7 rounded-lg bg-amber-50 flex items-center justify-center">
@@ -409,9 +475,7 @@ export function SessionDetailsPage({ id }: { id: string }) {
             </span>
             Quizzes
             {sessionQuizzes.length > 0 && (
-              <span className="ml-auto text-xs font-medium text-ink-400 bg-ink-100 rounded-full px-2 py-0.5">
-                {sessionQuizzes.length}
-              </span>
+              <span className="ml-auto text-xs font-medium text-ink-400 bg-ink-100 rounded-full px-2 py-0.5">{sessionQuizzes.length}</span>
             )}
           </h3>
           {sessionQuizzes.length === 0 ? (
@@ -428,18 +492,10 @@ export function SessionDetailsPage({ id }: { id: string }) {
                   </span>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-ink-800 truncate">{qz.title}</p>
-                    <p className="text-xs text-ink-400 mt-0.5">
-                      Due {formatDate(qz.deadline, { dateStyle: 'medium' })}
-                    </p>
+                    <p className="text-xs text-ink-400 mt-0.5">Due {formatDate(qz.deadline, { dateStyle: 'medium' })}</p>
                   </div>
                   {qz.form_url && (
-                    <a
-                      href={qz.form_url}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="text-brand-600 hover:text-brand-700 transition-colors"
-                      title="Open quiz form"
-                    >
+                    <a href={qz.form_url} target="_blank" rel="noreferrer" className="text-brand-600 hover:text-brand-700 transition-colors" title="Open quiz form">
                       <ExternalLink size={14} />
                     </a>
                   )}
@@ -461,9 +517,7 @@ export function SessionDetailsPage({ id }: { id: string }) {
             footer={
               <>
                 <button className="btn-secondary btn-md" onClick={() => setDeleteOpen(false)}>Cancel</button>
-                <button className="btn-md bg-brand-600 text-white hover:bg-brand-700 rounded-lg font-medium transition-colors" onClick={handleDelete}>
-                  Delete
-                </button>
+                <button className="btn-md bg-brand-600 text-white hover:bg-brand-700 rounded-lg font-medium transition-colors" onClick={handleDelete}>Delete</button>
               </>
             }
           >

@@ -18,7 +18,7 @@ export function AttendancePage() {
   const [selectedSession, setSelectedSession] = useState<string>('');
   const [records, setRecords] = useState<Record<string, AttendanceStatus>>({});
 
-  const sortedSessions = useMemo(() => [...sessions].sort((a, b) => +new Date(b.publish_date) - +new Date(a.publish_date)), [sessions]);
+  const sortedSessions = useMemo(() => [...sessions].sort((a, b) => +new Date(b.end_date) - +new Date(a.end_date)), [sessions]);
 
   useEffect(() => {
     if (!selectedSession && sortedSessions.length) setSelectedSession(sortedSessions[0].id);
@@ -81,9 +81,9 @@ export function AttendancePage() {
       <div className="card p-4">
         <div className="flex flex-wrap items-center gap-3">
           <select value={selectedSession} onChange={(e) => setSelectedSession(e.target.value)} className="input !w-auto">
-            {sortedSessions.map((s) => <option key={s.id} value={s.id}>{s.title} — {formatDate(s.publish_date, { dateStyle: 'medium' })}</option>)}
+            {sortedSessions.map((s) => <option key={s.id} value={s.id}>{s.title} — {formatDate(s.end_date, { dateStyle: 'medium' })}</option>)}
           </select>
-          {session && <Badge tone="neutral"><CalendarDays size={11} /> {formatDate(session.publish_date, { dateStyle: 'full' })}</Badge>}
+          {session && <Badge tone="neutral"><CalendarDays size={11} /> {formatDate(session.end_date, { dateStyle: 'full' })}</Badge>}
           <div className="relative ml-auto w-full sm:w-auto sm:min-w-[200px]">
             <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-400" />
             <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search members..." className="input !pl-9" />

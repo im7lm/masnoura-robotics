@@ -1,7 +1,7 @@
 import { useMemo, useState, useEffect, useRef } from 'react';
-import { ClipboardList, Search, ExternalLink, Clock, ArrowLeft, CalendarDays, GraduationCap, Award, StickyNote, CheckCircle2, Hourglass, Pencil, Trash2 } from 'lucide-react';
+import { ClipboardList, Search, ExternalLink, Clock, ArrowLeft, CalendarDays, GraduationCap, Award, StickyNote, CheckCircle2, Hourglass, Pencil, Trash2, BookOpen, Video } from 'lucide-react';
 import { Link, Breadcrumbs, useRouter } from '../components/Router';
-import { Badge, SubmissionTypeBadge, SectionHeader, EmptyState, formatDate, daysUntil, Avatar, Modal } from '../components/ui';
+import { Badge, SectionHeader, EmptyState, formatDate, daysUntil, Avatar, Modal } from '../components/ui';
 import { useAuth } from '../lib/auth';
 import { useTasks, useSessions, useTaskGrades, useMembers } from '../lib/hooks';
 import { supabase } from '../lib/supabase';
@@ -19,8 +19,57 @@ export function TasksPage() {
   const { profile } = useAuth();
   const [q, setQ] = useState('');
 
-  const filtered = tasks.filter((t) => t.title.toLowerCase().includes(q.toLowerCase()));
+  const filtered = tasks.filter((t) =>
+  t.title.toLowerCase().includes(q.toLowerCase())
+);
+
+const current = filtered
+  .filter((t) => {
+    const d = daysUntilDeadline(t.deadline);
+    return d >= 0 && d <= 7;
+  })
+  .sort((a,b)=>
+    +new Date(a.deadline)-+new Date(b.deadline)
+  );
+
+const upcoming = filtered
+  .filter((t)=>
+    daysUntilDeadline(t.deadline) > 7
+  )
+  .sort((a,b)=>
+    +new Date(a.deadline)-+new Date(b.deadline)
+  );
+
+const previous = filtered
+  .filter((t)=>
+    daysUntilDeadline(t.deadline) < 0
+  )
+  .sort((a,b)=>
+    +new Date(b.deadline)-+new Date(a.deadline)
+  );
+
+
   const isMember = profile?.role === 'member';
+
+  function isExpired(deadline: string) {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  return new Date(deadline) < today;
+}
+
+function daysUntilDeadline(deadline: string) {
+  const today = new Date();
+  today.setHours(0,0,0,0);
+
+  const end = new Date(deadline);
+  end.setHours(0,0,0,0);
+
+  return Math.ceil(
+    (end.getTime() - today.getTime()) /
+    (1000 * 60 * 60 * 24)
+  );
+}
 
   return (
     <div className="space-y-5">
@@ -41,14 +90,13 @@ export function TasksPage() {
             return (
               <Link key={t.id} to={`/tasks/${t.id}`} className="card card-hover p-5 block group">
                 <div className="flex items-center justify-between mb-2">
-                  <SubmissionTypeBadge type={t.submission_type} />
                   <DeadlineChip deadline={t.deadline} />
                 </div>
                 <h3 className="font-semibold text-ink-900 group-hover:text-brand-700 transition-colors">{t.title}</h3>
                 <p className="text-sm text-ink-500 mt-1 line-clamp-2">{t.description ?? ''}</p>
                 {session && (
                   <div className="flex items-center gap-1.5 mt-3 text-xs text-ink-500">
-                    <CalendarDays size={12} />
+                    <Video size={12} />
                     <span className="font-medium text-ink-600">{session.title}</span>
                   </div>
                 )}
@@ -66,8 +114,6 @@ export function TasksPage() {
           })}
         </div>
       )}
-      {/* keep refetch referenced so the list stays fresh when navigated back to */}
-      <span className="hidden" ref={() => { refetchTasks; }} />
     </div>
   );
 }
@@ -89,8 +135,7 @@ export function TaskDetailsPage({ id }: { id: string }) {
   const { data: grades, refetch: refetchGrades } = useTaskGrades();
   const { data: members } = useMembers();
   const { profile, activeCommittee } = useAuth();
-
-const role = profile?.role ?? "member";
+  const role = profile?.role ?? 'member';
   const { push } = useToast();
   const { navigate } = useRouter();
   const [gradingOpen, setGradingOpen] = useState(false);
@@ -128,14 +173,30 @@ const role = profile?.role ?? "member";
   return (
     <div className="space-y-5">
       <Breadcrumbs items={[{ label: 'Workspace', to: '/dashboard' }, { label: 'Tasks', to: '/tasks' }, { label: task.title }]} />
-      <Link to="/tasks" className="inline-flex items-center gap-1.5 text-sm text-ink-500 hover:text-ink-800 transition-colors"><ArrowLeft size={15} /> Back to tasks</Link>
+
+      {/* Back nav + session chip */}
+      <div className="flex items-center gap-3 flex-wrap">
+        <Link to="/tasks" className="inline-flex items-center gap-1.5 text-sm text-ink-500 hover:text-ink-800 transition-colors">
+          <ArrowLeft size={15} /> Back to tasks
+        </Link>
+        {session && (
+          <>
+            <span className="text-ink-300 text-sm">·</span>
+            <Link
+              to={`/sessions/${session.id}`}
+              className="inline-flex items-center gap-1.5 text-sm font-medium text-brand-700 bg-brand-50 hover:bg-brand-100 border border-brand-200/60 rounded-lg px-3 py-1 transition-colors"
+            >
+              <Video size={13} />
+              {session.title}
+            </Link>
+          </>
+        )}
+      </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
         <div className="lg:col-span-2 space-y-5">
           <div className="card p-6">
             <div className="flex items-center gap-2 flex-wrap mb-3">
-              <SubmissionTypeBadge type={task.submission_type} />
-              {session && <Badge tone="neutral">{session.title}</Badge>}
               {isMember && (myGrade
                 ? <Badge tone="mint"><CheckCircle2 size={11} /> Evaluated</Badge>
                 : <Badge tone="amber"><Hourglass size={11} /> Waiting for Evaluation</Badge>)}
@@ -147,11 +208,27 @@ const role = profile?.role ?? "member";
             </div>
           </div>
 
-          {/* Submission section - read-only for members */}
+          {/* Task Document */}
+          {task.document_url && (
+            <div className="card p-6">
+              <h3 className="font-semibold text-ink-900 mb-4">Task Document</h3>
+              <div className="flex flex-col items-center text-center py-4">
+                <div className="w-14 h-14 rounded-2xl bg-blue-50 flex items-center justify-center mx-auto mb-3">
+                  <BookOpen size={26} className="text-blue-600" />
+                </div>
+                <p className="text-sm text-ink-600 mb-4">Open the document that contains the assignment instructions.</p>
+                <a href={task.document_url} target="_blank" rel="noreferrer" className="btn-primary btn-lg">
+                  <BookOpen size={16} /> Open Task Document
+                </a>
+              </div>
+            </div>
+          )}
+
+          {/* Submission */}
           <div className="card p-6">
             <h3 className="font-semibold text-ink-900 mb-4">Submission</h3>
             {task.submission_url ? (
-              <div className="text-center py-6">
+              <div className="text-center py-4">
                 <div className="w-14 h-14 rounded-2xl bg-blue-50 flex items-center justify-center mx-auto mb-3"><ExternalLink size={26} className="text-blue-600" /></div>
                 <p className="text-sm text-ink-600 mb-4">Click the link below to open the submission form and submit your answers.</p>
                 <a href={task.submission_url} target="_blank" rel="noreferrer" className="btn-primary btn-lg">
@@ -159,7 +236,7 @@ const role = profile?.role ?? "member";
                 </a>
               </div>
             ) : (
-              <p className="text-sm text-ink-500">No submission link provided.</p>
+              <p className="text-sm text-ink-500">No submission link provided yet.</p>
             )}
           </div>
 
@@ -211,11 +288,10 @@ const role = profile?.role ?? "member";
           <div className="card p-5">
             <h3 className="font-semibold text-ink-900 mb-4">Details</h3>
             <dl className="space-y-3 text-sm">
-              <Row label="Type"><SubmissionTypeBadge type={task.submission_type} /></Row>
               <Row label="Deadline"><span className="text-ink-800 font-medium">{formatDate(task.deadline, { dateStyle: 'medium' })}</span></Row>
               <Row label="Session">
                 {session ? (
-                  <span className="text-ink-800 font-medium">{session.title}</span>
+                  <Link to={`/sessions/${session.id}`} className="text-brand-700 font-medium hover:underline">{session.title}</Link>
                 ) : (
                   <span className="text-ink-400">No session</span>
                 )}
@@ -223,7 +299,6 @@ const role = profile?.role ?? "member";
             </dl>
           </div>
 
-          {/* Grading button for leaders */}
           {canGrade && (
             <div className="card p-5">
               <h3 className="font-semibold text-ink-900 mb-3">Evaluation</h3>
@@ -239,7 +314,6 @@ const role = profile?.role ?? "member";
             </div>
           )}
 
-          {/* Manage actions */}
           {canManage && (
             <div className="card p-5">
               <h3 className="font-semibold text-ink-900 mb-3">Manage Task</h3>
@@ -290,17 +364,10 @@ const role = profile?.role ?? "member";
   );
 }
 
-interface GradeEntry {
-  points: string;
-  bonus: string;
-  leader_note: string;
-}
+interface GradeEntry { points: string; bonus: string; leader_note: string; }
 
 function GradingModal({ open, onClose, taskId, taskTitle, members, existingGrades, push, onSaved }: {
-  open: boolean;
-  onClose: () => void;
-  taskId: string;
-  taskTitle: string;
+  open: boolean; onClose: () => void; taskId: string; taskTitle: string;
   members: { id: string; name: string; avatar_url: string | null }[];
   existingGrades: TaskGrade[];
   push: (t: 'success' | 'error' | 'info', m: string) => void;
@@ -312,21 +379,14 @@ function GradingModal({ open, onClose, taskId, taskTitle, members, existingGrade
   const initializedRef = useRef(false);
 
   useEffect(() => {
-    console.log(supabase.getChannels());
     if (!open) { initializedRef.current = false; return; }
     if (initializedRef.current) return;
     const next: Record<string, GradeEntry> = {};
     for (const m of members) {
       const existing = existingGrades.find((g) => g.member_id === m.id);
-      next[m.id] = {
-        points: existing ? String(existing.points) : '',
-        bonus: existing ? String(existing.bonus) : '',
-        leader_note: existing?.leader_note ?? '',
-      };
+      next[m.id] = { points: existing ? String(existing.points) : '', bonus: existing ? String(existing.bonus) : '', leader_note: existing?.leader_note ?? '' };
     }
-    setEntries(next);
-    setDirty({});
-    initializedRef.current = true;
+    setEntries(next); setDirty({}); initializedRef.current = true;
   }, [open, members, existingGrades]);
 
   const updateField = (memberId: string, field: keyof GradeEntry, value: string) => {
@@ -337,28 +397,16 @@ function GradingModal({ open, onClose, taskId, taskTitle, members, existingGrade
   const save = async () => {
     setSaving(true);
     const editedIds = members.filter((m) => dirty[m.id]).map((m) => m.id);
-    if (editedIds.length === 0) {
-      push('info', 'No changes to save');
-      setSaving(false);
-      onClose();
-      return;
-    }
+    if (editedIds.length === 0) { push('info', 'No changes to save'); setSaving(false); onClose(); return; }
     const rows = editedIds.map((mid) => {
       const e = entries[mid] ?? { points: '', bonus: '', leader_note: '' };
-      return {
-        task_id: taskId,
-        member_id: mid,
-        points: Math.max(0, parseInt(e.points) || 0),
-        bonus: Math.max(0, parseInt(e.bonus) || 0),
-        leader_note: e.leader_note,
-      };
+      return { task_id: taskId, member_id: mid, points: Math.max(0, parseInt(e.points) || 0), bonus: Math.max(0, parseInt(e.bonus) || 0), leader_note: e.leader_note };
     });
     const { error } = await supabase.from('task_grades').upsert(rows, { onConflict: 'task_id,member_id' });
     setSaving(false);
     if (error) { push('error', error.message); return; }
     push('success', `${rows.length} ${rows.length === 1 ? 'grade' : 'grades'} saved`);
-    onSaved();
-    onClose();
+    onSaved(); onClose();
   };
 
   return (
@@ -369,9 +417,7 @@ function GradingModal({ open, onClose, taskId, taskTitle, members, existingGrade
       width="max-w-2xl"
       footer={<>
         <button className="btn-secondary btn-md" onClick={onClose}>Cancel</button>
-        <button className="btn-primary btn-md" onClick={save} disabled={saving}>
-          {saving ? 'Saving...' : 'Save Scores'}
-        </button>
+        <button className="btn-primary btn-md" onClick={save} disabled={saving}>{saving ? 'Saving...' : 'Save Scores'}</button>
       </>}
     >
       {members.length === 0 ? (
@@ -391,38 +437,16 @@ function GradingModal({ open, onClose, taskId, taskTitle, members, existingGrade
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label className="block text-xs font-medium text-ink-600 mb-1">Points</label>
-                    <input
-                      type="number"
-                      min="0"
-                      value={e.points}
-                      onChange={(ev) => updateField(m.id, 'points', ev.target.value)}
-                      placeholder="0"
-                      className="input"
-                    />
+                    <input type="number" min="0" value={e.points} onChange={(ev) => updateField(m.id, 'points', ev.target.value)} placeholder="0" className="input" />
                   </div>
                   <div>
                     <label className="block text-xs font-medium text-ink-600 mb-1">Bonus</label>
-                    <input
-                      type="number"
-                      min="0"
-                      value={e.bonus}
-                      onChange={(ev) => updateField(m.id, 'bonus', ev.target.value)}
-                      placeholder="0"
-                      className="input"
-                    />
+                    <input type="number" min="0" value={e.bonus} onChange={(ev) => updateField(m.id, 'bonus', ev.target.value)} placeholder="0" className="input" />
                   </div>
                 </div>
                 <div className="mt-3">
-                  <label className="block text-xs font-medium text-ink-600 mb-1 flex items-center gap-1">
-                    <StickyNote size={11} /> Leader Note
-                  </label>
-                  <textarea
-                    rows={2}
-                    value={e.leader_note}
-                    onChange={(ev) => updateField(m.id, 'leader_note', ev.target.value)}
-                    placeholder="Optional feedback..."
-                    className="input !h-auto py-2 resize-none"
-                  />
+                  <label className="block text-xs font-medium text-ink-600 mb-1 flex items-center gap-1"><StickyNote size={11} /> Leader Note</label>
+                  <textarea rows={2} value={e.leader_note} onChange={(ev) => updateField(m.id, 'leader_note', ev.target.value)} placeholder="Optional feedback..." className="input !h-auto py-2 resize-none" />
                 </div>
               </div>
             );

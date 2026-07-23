@@ -19,7 +19,7 @@ export function DashboardPage() {
   const { data: attendance } = useAttendance();
 
   const today = new Date();
-  const upcomingSessions = useMemo(() => sessions.filter((s) => new Date(s.publish_date) >= today).slice(0, 3), [sessions]);
+  const upcomingSessions = useMemo(() => sessions.filter((s) => new Date(s.end_date) >= today).slice(0, 3), [sessions]);
   const nextSession = upcomingSessions[0];
   const openTasks = useMemo(() => tasks.filter((t) => daysUntil(t.deadline) >= 0).sort((a, b) => +new Date(a.deadline) - +new Date(b.deadline)), [tasks]);
   const nextDeadline = openTasks[0];
@@ -30,13 +30,13 @@ export function DashboardPage() {
   const pinned = announcements.filter((a) => a.pinned);
 
   const trend = useMemo(() => {
-    const sorted = [...sessions].sort((a, b) => +new Date(a.publish_date) - +new Date(b.publish_date)).slice(-6);
+    const sorted = [...sessions].sort((a, b) => +new Date(a.end_date) - +new Date(b.end_date)).slice(-6);
     return sorted.map((s) => {
       const att = attendance.filter((a) => a.session_id === s.id);
       const present = att.filter((a) => a.status === 'present').length;
       const late = att.filter((a) => a.status === 'late').length;
       const rate = att.length ? Math.round(100 * (present + late * 0.5) / att.length) : 0;
-      return { label: new Date(s.publish_date).toLocaleDateString('en', { month: 'short', day: 'numeric' }), value: rate };
+      return { label: new Date(s.end_date).toLocaleDateString('en', { month: 'short', day: 'numeric' }), value: rate };
     });
   }, [sessions, attendance]);
 
@@ -94,7 +94,7 @@ export function DashboardPage() {
               <p className="text-base font-semibold text-ink-900">{nextSession.title}</p>
               <p className="text-xs text-ink-500 mt-1 line-clamp-2">{nextSession.description ?? 'No description'}</p>
               <div className="flex items-center gap-1.5 text-xs text-ink-500 mt-3">
-                <CalendarDays size={13} /> {formatDate(nextSession.publish_date, { dateStyle: 'medium' })}
+                <CalendarDays size={13} /> {formatDate(nextSession.end_date, { dateStyle: 'medium' })}
               </div>
               {nextSession.drive_folder_url && (
                 <a href={nextSession.drive_folder_url} target="_blank" rel="noreferrer" className="btn-primary btn-sm mt-3 w-full">
