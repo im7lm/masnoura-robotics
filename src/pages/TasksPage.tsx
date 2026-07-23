@@ -1,6 +1,22 @@
 import { useMemo, useState, useEffect, useRef } from 'react';
-import { ClipboardList, Search, ExternalLink, Clock, ArrowLeft, CalendarDays, GraduationCap, Award, StickyNote, CheckCircle2, Hourglass, Pencil, Trash2, BookOpen, Video } from 'lucide-react';
-import { Link, Breadcrumbs, useRouter } from '../components/Router';
+import {
+  ClipboardList,
+  Search,
+  ExternalLink,
+  Clock,
+  ArrowLeft,
+  CalendarDays,
+  GraduationCap,
+  Award,
+  StickyNote,
+  CheckCircle2,
+  Hourglass,
+  Pencil,
+  Trash2,
+  BookOpen,
+  Video,
+  Lock
+} from 'lucide-react';import { Link, Breadcrumbs, useRouter } from '../components/Router';
 import { Badge, SectionHeader, EmptyState, formatDate, daysUntil, Avatar, Modal } from '../components/ui';
 import { useAuth } from '../lib/auth';
 import { useTasks, useSessions, useTaskGrades, useMembers } from '../lib/hooks';
@@ -23,53 +39,119 @@ export function TasksPage() {
   t.title.toLowerCase().includes(q.toLowerCase())
 );
 
-const current = filtered
-  .filter((t) => {
-    const d = daysUntilDeadline(t.deadline);
-    return d >= 0 && d <= 7;
-  })
-  .sort((a,b)=>
-    +new Date(a.deadline)-+new Date(b.deadline)
-  );
+const today = new Date();
+today.setHours(0, 0, 0, 0);
 
-const upcoming = filtered
-  .filter((t)=>
-    daysUntilDeadline(t.deadline) > 7
-  )
-  .sort((a,b)=>
-    +new Date(a.deadline)-+new Date(b.deadline)
-  );
+const currentTasks = filtered.filter((task) => {
+  const session = sessions.find((s) => s.id === task.session_id);
+  
 
-const previous = filtered
-  .filter((t)=>
-    daysUntilDeadline(t.deadline) < 0
-  )
-  .sort((a,b)=>
-    +new Date(b.deadline)-+new Date(a.deadline)
+  return (
+    !session?.is_locked &&
+    new Date(task.deadline) >= today
   );
+});
+
+
+const upcomingTasks = filtered.filter((task) => {
+  const session = sessions.find((s) => s.id === task.session_id);
+  
+
+  return session?.is_locked;
+});
+
+const previousTasks = filtered.filter((task) => {
+  const session = sessions.find((s) => s.id === task.session_id);
+
+  return (
+    !session?.is_locked &&
+    new Date(task.deadline) < today
+  );
+});
 
 
   const isMember = profile?.role === 'member';
 
-  function isExpired(deadline: string) {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
+  const renderTaskSection = (
+  title: string,
+  color: string,
+  list: typeof filtered
+) => {
+  if (!list.length) return null;
 
-  return new Date(deadline) < today;
-}
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center gap-3">
+        <div className={`w-1.5 h-6 rounded-full ${color}`} />
+        <h2 className="text-lg font-semibold text-ink-900">
+          {title}
+        </h2>
 
-function daysUntilDeadline(deadline: string) {
-  const today = new Date();
-  today.setHours(0,0,0,0);
+        <Badge tone="amber">
+          {list.length}
+        </Badge>
+      </div>
 
-  const end = new Date(deadline);
-  end.setHours(0,0,0,0);
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+        {list.map((t) => {
+          const session = sessions.find((s) => s.id === t.session_id);
+          const myGrade = isMember
+            ? grades.find(
+                (g) =>
+                  g.task_id === t.id &&
+                  g.member_id === profile?.id
+              )
+            : null;
 
-  return Math.ceil(
-    (end.getTime() - today.getTime()) /
-    (1000 * 60 * 60 * 24)
+          return (
+            <Link
+              key={t.id}
+              to={`/tasks/${t.id}`}
+              className="card card-hover p-5 block group"
+            >
+              <div className="flex items-center justify-between mb-2">
+                <DeadlineChip deadline={t.deadline} />
+              </div>
+
+              <h3 className="font-semibold text-ink-900 group-hover:text-brand-700 transition-colors">
+                {t.title}
+              </h3>
+
+              <p className="text-sm text-ink-500 mt-1 line-clamp-2">
+                {t.description ?? ""}
+              </p>
+
+              {session && (
+                <div className="flex items-center gap-1.5 mt-3 text-xs text-ink-500">
+                  <Video size={12} />
+                  <span className="font-medium text-ink-600">
+                    {session.title}
+                  </span>
+                </div>
+              )}
+
+              {isMember && (
+                <div className="mt-3 pt-3 border-t border-ink-100">
+                  {myGrade ? (
+                    <Badge tone="mint">
+                      <CheckCircle2 size={11} />
+                      Evaluated
+                    </Badge>
+                  ) : (
+                    <Badge tone="amber">
+                      <Hourglass size={11} />
+                      Waiting
+                    </Badge>
+                  )}
+                </div>
+              )}
+            </Link>
+          );
+        })}
+      </div>
+    </div>
   );
-}
+};
 
   return (
     <div className="space-y-5">
@@ -80,40 +162,35 @@ function daysUntilDeadline(deadline: string) {
         <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search tasks..." className="input !pl-9" />
       </div>
 
-      {filtered.length === 0 ? (
-        <div className="card"><EmptyState icon={<ClipboardList size={22} />} title="No tasks found" description="Try a different search." /></div>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-          {filtered.map((t) => {
-            const session = sessions.find((s) => s.id === t.session_id);
-            const myGrade = isMember ? grades.find((g) => g.task_id === t.id && g.member_id === profile?.id) : null;
-            return (
-              <Link key={t.id} to={`/tasks/${t.id}`} className="card card-hover p-5 block group">
-                <div className="flex items-center justify-between mb-2">
-                  <DeadlineChip deadline={t.deadline} />
-                </div>
-                <h3 className="font-semibold text-ink-900 group-hover:text-brand-700 transition-colors">{t.title}</h3>
-                <p className="text-sm text-ink-500 mt-1 line-clamp-2">{t.description ?? ''}</p>
-                {session && (
-                  <div className="flex items-center gap-1.5 mt-3 text-xs text-ink-500">
-                    <Video size={12} />
-                    <span className="font-medium text-ink-600">{session.title}</span>
-                  </div>
-                )}
-                {isMember && (
-                  <div className="mt-3 pt-3 border-t border-ink-100">
-                    {myGrade ? (
-                      <Badge tone="mint"><CheckCircle2 size={11} /> Evaluated</Badge>
-                    ) : (
-                      <Badge tone="amber"><Hourglass size={11} /> Waiting for Evaluation</Badge>
-                    )}
-                  </div>
-                )}
-              </Link>
-            );
-          })}
-        </div>
-      )}
+{filtered.length === 0 ? (
+  <div className="card">
+    <EmptyState
+      icon={<ClipboardList size={22} />}
+      title="No tasks found"
+      description="Try a different search."
+    />
+  </div>
+) : (
+  <div className="space-y-8">
+    {renderTaskSection(
+      "Current Tasks",
+      "bg-green-500",
+      currentTasks
+    )}
+
+    {renderTaskSection(
+      "Upcoming Tasks",
+      "bg-amber-500",
+      upcomingTasks
+    )}
+
+    {renderTaskSection(
+      "Previous Tasks",
+      "bg-slate-400",
+      previousTasks
+    )}
+  </div>
+)}
     </div>
   );
 }
@@ -144,6 +221,7 @@ export function TaskDetailsPage({ id }: { id: string }) {
 
   const task = tasks.find((t) => t.id === id);
   const session = sessions.find((s) => s.id === task?.session_id);
+  const isLocked = session?.is_locked ?? false;
   const taskGrades = grades.filter((g) => g.task_id === id);
 
   const canGrade = GRADING_ROLES.includes(role);
@@ -208,21 +286,47 @@ export function TaskDetailsPage({ id }: { id: string }) {
             </div>
           </div>
 
-          {/* Task Document */}
-          {task.document_url && (
-            <div className="card p-6">
-              <h3 className="font-semibold text-ink-900 mb-4">Task Document</h3>
-              <div className="flex flex-col items-center text-center py-4">
-                <div className="w-14 h-14 rounded-2xl bg-blue-50 flex items-center justify-center mx-auto mb-3">
-                  <BookOpen size={26} className="text-blue-600" />
-                </div>
-                <p className="text-sm text-ink-600 mb-4">Open the document that contains the assignment instructions.</p>
-                <a href={task.document_url} target="_blank" rel="noreferrer" className="btn-primary btn-lg">
-                  <BookOpen size={16} /> Open Task Document
-                </a>
-              </div>
-            </div>
-          )}
+{/* Task Document */}
+<div className="card p-6">
+  <h3 className="font-semibold text-ink-900 mb-4">Task Document</h3>
+
+  {task.document_url ? (
+    <div className="flex flex-col items-center text-center py-4">
+      <div className="w-14 h-14 rounded-2xl bg-blue-50 flex items-center justify-center mx-auto mb-3">
+        <BookOpen size={26} className="text-blue-600" />
+      </div>
+
+      <p className="text-sm text-ink-600 mb-4">
+        Open the document that contains the assignment instructions.
+      </p>
+
+      {isLocked ? (
+        <button
+          disabled
+          className="btn-primary btn-lg opacity-50 cursor-not-allowed"
+        >
+          <BookOpen size={16} />
+          Available when session is unlocked
+        </button>
+      ) : (
+        <a
+          href={task.document_url}
+          target="_blank"
+          rel="noreferrer"
+          className="btn-primary btn-lg"
+        >
+          <BookOpen size={16} />
+          Open Task Document
+        </a>
+      )}
+    </div>
+  ) : (
+    <p className="text-sm text-ink-500">
+      No task document has been uploaded yet.
+    </p>
+  )}
+</div>
+          
 
           {/* Submission */}
           <div className="card p-6">
@@ -231,9 +335,25 @@ export function TaskDetailsPage({ id }: { id: string }) {
               <div className="text-center py-4">
                 <div className="w-14 h-14 rounded-2xl bg-blue-50 flex items-center justify-center mx-auto mb-3"><ExternalLink size={26} className="text-blue-600" /></div>
                 <p className="text-sm text-ink-600 mb-4">Click the link below to open the submission form and submit your answers.</p>
-                <a href={task.submission_url} target="_blank" rel="noreferrer" className="btn-primary btn-lg">
-                  <ExternalLink size={16} /> Open Submission
-                </a>
+{isLocked ? (
+  <button
+    disabled
+    className="btn-primary btn-lg opacity-50 cursor-not-allowed"
+  >
+    <ExternalLink size={16} />
+    Submission not available yet
+  </button>
+) : (
+  <a
+    href={task.submission_url}
+    target="_blank"
+    rel="noreferrer"
+    className="btn-primary btn-lg"
+  >
+    <ExternalLink size={16} />
+    Open Submission
+  </a>
+)}
               </div>
             ) : (
               <p className="text-sm text-ink-500">No submission link provided yet.</p>

@@ -25,7 +25,7 @@ export function LoginPage() {
           <div className="w-14 h-14 rounded-2xl bg-brand-600 flex items-center justify-center text-white shadow-pop mb-4">
             <Hexagon size={30} strokeWidth={2.5} />
           </div>
-          <h1 className="text-2xl font-semibold text-ink-900 tracking-tight">Nexus</h1>
+          <h1 className="text-2xl font-semibold text-ink-900 tracking-tight">Mansoura Robotics</h1>
           <p className="text-sm text-ink-500 mt-1">Team Management Portal</p>
         </div>
 
@@ -94,8 +94,6 @@ export function LoginPage() {
             </p>
           </div>
         </div>
-
-        <p className="text-center text-xs text-ink-400 mt-6">Accounts are created by the General Team Leader. No self-registration.</p>
       </div>
     </div>
   );
