@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { ArrowLeft, Mail, Phone, Calendar, Star, Award, AlertTriangle, TrendingUp, CheckCircle2, Clock, XCircle, FileText, Send, Flame, Trophy } from 'lucide-react';
 import { Breadcrumbs, Link } from '../components/Router';
 import { Avatar, Badge, StatusBadge, RoleBadge, Progress, EmptyState, formatDate, AttendanceBadge } from '../components/ui';
-import { useMembers, useCommittees, useMemberScores, useAttendance, useSessions, useTaskSubmissions, useTasks, useQuizScores, useQuizzes, useStrikes, useBonuses } from '../lib/hooks';
+import { useMembers, useCommittees, useMemberScores, useAttendance, useSessions, useTaskGrades, useTasks, useQuizScores, useQuizzes, useStrikes, useBonuses } from '../lib/hooks';
 import { useAuth } from '../lib/auth';
 import { supabase } from '../lib/supabase';
 import { useToast } from '../components/Toast';
@@ -13,7 +13,7 @@ export function MemberProfilePage({ id }: { id: string }) {
   const { data: scores } = useMemberScores();
   const { data: attendance } = useAttendance();
   const { data: sessions } = useSessions();
-  const { data: taskSubs } = useTaskSubmissions();
+  const { data: taskGrades } = useTaskGrades();
   const { data: tasks } = useTasks();
   const { data: quizScores } = useQuizScores();
   const { data: quizzes } = useQuizzes();
@@ -30,7 +30,7 @@ export function MemberProfilePage({ id }: { id: string }) {
   const committee = committees.find((c) => c.id === member?.committee_id);
 
   const myAttendance = attendance.filter((a) => a.member_id === id);
-  const myTaskSubs = taskSubs.filter((s) => s.member_id === id);
+  const myTaskGrades = taskGrades.filter((g) => g.member_id === id);
   const myQuizScores = quizScores.filter((s) => s.member_id === id);
   const myStrikes = strikes.filter((s) => s.member_id === id);
   const myBonuses = bonuses.filter((b) => b.member_id === id);
@@ -204,21 +204,26 @@ export function MemberProfilePage({ id }: { id: string }) {
 
       {tab === 'tasks' && (
         <div className="card p-5">
-          <h3 className="font-semibold text-ink-900 mb-4">Task History ({myTaskSubs.length})</h3>
+          <h3 className="font-semibold text-ink-900 mb-4">Task History ({myTaskGrades.length})</h3>
           <div className="space-y-2.5">
-            {myTaskSubs.map((s) => {
-              const task = tasks.find((t) => t.id === s.task_id);
+            {myTaskGrades.map((g) => {
+              const task = tasks.find((t) => t.id === g.task_id);
+              const total = g.points + g.bonus;
               return (
-                <Link key={s.id} to={`/tasks/${s.task_id}`} className="block p-3 rounded-xl border border-ink-200 hover:border-brand-300 hover:bg-brand-50/30 transition-all">
+                <Link key={g.id} to={`/tasks/${g.task_id}`} className="block p-3 rounded-xl border border-ink-200 hover:border-brand-300 hover:bg-brand-50/30 transition-all">
                   <div className="flex items-center justify-between">
                     <p className="text-sm font-medium text-ink-800">{task?.title ?? 'Task'}</p>
-                    {s.submitted_at ? <Badge tone="mint"><CheckCircle2 size={11} /> Submitted · {s.score}{s.bonus ? ` +${s.bonus}` : ''}</Badge> : <Badge tone="amber">Pending</Badge>}
+                    <Badge tone="mint">{g.points} pts{g.bonus ? ` (+${g.bonus} bonus)` : ''}</Badge>
                   </div>
-                  <p className="text-xs text-ink-500 mt-1">{s.submitted_at ? formatDate(s.submitted_at, { dateStyle: 'medium' }) : 'Not submitted'}</p>
+                  <div className="flex items-center justify-between mt-1">
+                    <p className="text-xs text-ink-500">Total earned: {total}</p>
+                    {g.updated_at && <p className="text-xs text-ink-400">{formatDate(g.updated_at, { dateStyle: 'medium' })}</p>}
+                  </div>
+                  {g.leader_note && <p className="text-xs text-ink-600 italic mt-2 pl-3 border-l-2 border-ink-200">{g.leader_note}</p>}
                 </Link>
               );
             })}
-            {myTaskSubs.length === 0 && <p className="text-sm text-ink-500">No task submissions yet.</p>}
+            {myTaskGrades.length === 0 && <p className="text-sm text-ink-500">No graded tasks yet.</p>}
           </div>
         </div>
       )}

@@ -3,9 +3,7 @@ import { createClient } from '@supabase/supabase-js';
 const url = import.meta.env.VITE_SUPABASE_URL as string;
 const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
 
-export const supabase = createClient(url, anonKey, {
-  auth: { persistSession: false },
-});
+export const supabase = createClient(url, anonKey);
 
 // ===== Types =====
 export type Role = 'admin' | 'director' | 'team_leader' | 'vice_team_leader' | 'hr' | 'member';
@@ -46,11 +44,6 @@ export interface Task {
 export interface Quiz {
   id: string; session_id: string | null; title: string; deadline: string;
   form_url: string | null; committee_id: string;
-}
-
-export interface TaskSubmission {
-  id: string; task_id: string; member_id: string;
-  submitted_at: string | null; link: string | null; score: number; bonus: number;
 }
 
 export interface QuizScore {

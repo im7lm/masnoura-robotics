@@ -1,5 +1,4 @@
-import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
-import type { Session } from '@supabase/supabase-js';
+import { createContext, useContext, useEffect, useMemo, useState, useCallback, type ReactNode } from 'react';import type { Session } from '@supabase/supabase-js';
 import type { Member, Committee, Role, DirectorCommittee } from './supabase';
 import { supabase } from './supabase';
 
@@ -17,6 +16,8 @@ interface AuthCtx {
   availableCommittees: Committee[];
   activeCommittee: Committee | null;
   setActiveCommitteeId: (id: string) => void;
+
+  refreshGlobal: () => void;
 }
 
 const Ctx = createContext<AuthCtx | null>(null);
@@ -63,22 +64,39 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [session?.user?.id]);
 
   // Load committees, members, director assignments
+  const loadGlobalData = useCallback(async () => {
+    const [com, mem, dir] = await Promise.all([
+      supabase.from('committees').select('*').order('name'),
+      supabase.from('members').select('*').order('name'),
+      supabase.from('director_committees').select('*'),
+    ]);
+    if (com.data) setCommittees(com.data as Committee[]);
+    if (mem.data) setMembers(mem.data as Member[]);
+    if (dir.data) setDirectorAssignments(dir.data as DirectorCommittee[]);
+  }, []);
+
   useEffect(() => {
     if (!profile) return;
     let active = true;
     (async () => {
-      const [com, mem, dir] = await Promise.all([
-        supabase.from('committees').select('*').order('name'),
-        supabase.from('members').select('*').order('name'),
-        supabase.from('director_committees').select('*'),
-      ]);
-      if (!active) return;
-      if (com.data) setCommittees(com.data as Committee[]);
-      if (mem.data) setMembers(mem.data as Member[]);
-      if (dir.data) setDirectorAssignments(dir.data as DirectorCommittee[]);
+      await loadGlobalData();
     })();
     return () => { active = false; };
-  }, [profile?.id]);
+  }, [profile?.id, loadGlobalData]);
+
+  // Realtime: keep committees, members, director_assignments in sync
+  useEffect(() => {
+    if (!profile) return;
+    const channel = supabase
+      .channel(`auth-global:${Math.random().toString(36).slice(2)}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'committees' }, loadGlobalData)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'members' }, loadGlobalData)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'director_committees' }, loadGlobalData)
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [profile?.id, loadGlobalData]);
+
+  const refreshGlobal = useCallback(() => { loadGlobalData(); }, [loadGlobalData]);
 
   const availableCommittees = useMemo(() => {
     if (!profile) return [];
@@ -126,6 +144,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       session, profile, loading, signIn, signOut,
       committees, members, directorAssignments,
       availableCommittees, activeCommittee, setActiveCommitteeId,
+      refreshGlobal,
     }}>
       {children}
     </Ctx.Provider>

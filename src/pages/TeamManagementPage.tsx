@@ -44,11 +44,9 @@ export function TeamManagementPage() {
 // ===== COMMITTEES TAB =====
 function CommitteesTab() {
   const { push } = useToast();
-  const { committees, members, directorAssignments } = useAuth();
+  const { committees, members, directorAssignments, refreshGlobal } = useAuth();
   const [showCreate, setShowCreate] = useState(false);
   const [editing, setEditing] = useState<Committee | null>(null);
-  const [refreshKey, setRefreshKey] = useState(0);
-  const refresh = () => setRefreshKey((k) => k + 1);
 
   const [name, setName] = useState('');
   const [type, setType] = useState<'technical' | 'non_technical'>('technical');
@@ -65,14 +63,14 @@ function CommitteesTab() {
     }
     push('success', 'Committee created');
     setShowCreate(false); setName(''); setType('technical'); setColor('#E53935'); setDirectorId('');
-    refresh();
+    refreshGlobal();
   };
 
   const deleteCommittee = async (id: string) => {
     if (!confirm('Delete this committee? All its sessions, tasks, and data will be removed.')) return;
     const { error } = await supabase.from('committees').delete().eq('id', id);
     if (error) { push('error', error.message); return; }
-    push('success', 'Committee deleted'); refresh();
+    push('success', 'Committee deleted'); refreshGlobal();
   };
 
   const directors = members.filter((m) => m.role === 'director');
@@ -106,7 +104,7 @@ function CommitteesTab() {
               allMembers={members}
               onEdit={() => setEditing(c)}
               onDelete={() => deleteCommittee(c.id)}
-              onRefresh={refresh}
+              onRefresh={refreshGlobal}
             />
           );
         })}
@@ -148,7 +146,7 @@ function CommitteesTab() {
         </div>
       </Modal>
 
-      {editing && <EditCommitteeModal committee={editing} onClose={() => setEditing(null)} onSaved={refresh} />}
+      {editing && <EditCommitteeModal committee={editing} onClose={() => setEditing(null)} onSaved={refreshGlobal} />}
     </div>
   );
 }
@@ -157,6 +155,7 @@ function CommitteeCard({ committee, directors, teamLeader, viceLeader, hr, membe
   committee: Committee; directors: Member[]; teamLeader: Member | null; viceLeader: Member | null; hr: Member | null; memberCount: number; allMembers: Member[];
   onEdit: () => void; onDelete: () => void; onRefresh: () => void;
 }) {
+
   const { push } = useToast();
   const [assigning, setAssigning] = useState<null | 'team_leader' | 'vice_team_leader' | 'hr'>(null);
   const [selectedUserId, setSelectedUserId] = useState('');
@@ -291,10 +290,8 @@ function EditCommitteeModal({ committee, onClose, onSaved }: { committee: Commit
 // ===== USERS TAB =====
 function UsersTab() {
   const { push } = useToast();
-  const { members, committees } = useAuth();
+  const { members, committees, refreshGlobal } = useAuth();
   const [showCreate, setShowCreate] = useState(false);
-  const [refreshKey, setRefreshKey] = useState(0);
-  const refresh = () => setRefreshKey((k) => k + 1);
 
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
@@ -308,35 +305,20 @@ function UsersTab() {
     setCreating(true);
     try {
       const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-const { data: sessionData } = await supabase.auth.getSession();
-
-console.log("Session:", sessionData.session);
-console.log("Access Token:", sessionData.session?.access_token);
-
-const res = await fetch(`${supabaseUrl}/functions/v1/create-user`, {
-  method: "POST",
-  headers: {
-    "Content-Type": "application/json",
-    "Authorization": `Bearer ${sessionData.session?.access_token}`,
-  },
-  body: JSON.stringify({
-    name,
-    email,
-    password,
-    role,
-    committee_id: committeeId || null,
-  }),
-});
-
-console.log("Status:", res.status);
-console.log("Response:", await res.text());
-
-return;
+      const { data: sessionData } = await supabase.auth.getSession();
+      const res = await fetch(`${supabaseUrl}/functions/v1/create-user`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${sessionData.session?.access_token}`,
+        },
+        body: JSON.stringify({ name, email, password, role, committee_id: committeeId || null }),
+      });
       const data = await res.json();
       if (!res.ok) { push('error', data.error || 'Failed to create user'); return; }
       push('success', 'User created — they can now log in');
       setShowCreate(false); setName(''); setEmail(''); setPassword(''); setRole('member'); setCommitteeId('');
-      refresh();
+      refreshGlobal();
     } catch (err) {
       push('error', (err as Error).message);
     } finally {
@@ -348,7 +330,7 @@ return;
     if (!confirm('Delete this user? This will also delete their auth account.')) return;
     const { error } = await supabase.from('members').delete().eq('id', id);
     if (error) { push('error', error.message); return; }
-    push('success', 'User deleted'); refresh();
+    push('success', 'User deleted'); refreshGlobal();
   };
 
   return (
@@ -431,24 +413,22 @@ return;
 // ===== DIRECTORS TAB =====
 function DirectorsTab() {
   const { push } = useToast();
-  const { members, committees, directorAssignments } = useAuth();
+  const { members, committees, directorAssignments, refreshGlobal } = useAuth();
   const [directorId, setDirectorId] = useState('');
   const [committeeId, setCommitteeId] = useState('');
-  const [refreshKey, setRefreshKey] = useState(0);
-  const refresh = () => setRefreshKey((k) => k + 1);
 
   const assign = async () => {
     if (!directorId || !committeeId) { push('error', 'Select director and committee'); return; }
     const { error } = await supabase.from('director_committees').insert({ director_id: directorId, committee_id: committeeId });
     if (error) { push('error', error.message); return; }
     push('success', 'Director assigned to committee');
-    setCommitteeId(''); refresh();
+    setCommitteeId(''); refreshGlobal();
   };
 
   const removeAssignment = async (id: string) => {
     const { error } = await supabase.from('director_committees').delete().eq('id', id);
     if (error) { push('error', error.message); return; }
-    push('success', 'Assignment removed'); refresh();
+    push('success', 'Assignment removed'); refreshGlobal();
   };
 
   const directors = members.filter((m) => m.role === 'director');

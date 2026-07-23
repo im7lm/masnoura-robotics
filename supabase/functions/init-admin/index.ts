@@ -15,8 +15,8 @@ Deno.serve(async (req: Request) => {
   }
 
   try {
-    const adminEmail = "admin@nexus.edu";
-    const adminPassword = "nexus2026";
+const adminEmail = Deno.env.get("ADMIN_EMAIL")!;
+const adminPassword = Deno.env.get("ADMIN_PASSWORD")!;
     const adminName = "General Team Leader";
     const adminPosition = "General Team Leader";
 

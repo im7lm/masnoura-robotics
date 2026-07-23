@@ -1,12 +1,61 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { supabase } from './supabase';
 import { useAuth } from './auth';
 import type {
-  Member, Committee, Session, Task, Quiz, TaskSubmission, TaskGrade, QuizScore,
+  Member, Committee, Session, Task, Quiz, TaskGrade, QuizScore,
   Attendance, Strike, Bonus, Announcement, MemberScore,
 } from './supabase';
 
-// ===== Committees (all accessible to current user) =====
+type QueryResult<T> = { data: T[]; loading: boolean; error: string | null; refetch: () => void };
+
+/**
+ * Fetches data from a table and keeps it synchronized via Supabase Realtime.
+ * Any INSERT/UPDATE/DELETE on the table triggers a refetch of the scoped query.
+ */
+function useRealtimeQuery<T>(
+  table: string,
+  buildQuery: () => Promise<{ data: T[] | null; error: { message: string } | null }>,
+  deps: unknown[],
+): QueryResult<T> {
+  const [data, setData] = useState<T[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [nonce, setNonce] = useState(0);
+  const buildRef = useRef(buildQuery);
+  buildRef.current = buildQuery;
+
+  const fetch = useCallback(async (activeRef: { current: boolean }) => {
+    setLoading(true);
+    const { data, error } = await buildRef.current();
+    if (!activeRef.current) return;
+    if (error) setError(error.message);
+    else { setData(data ?? []); setError(null); }
+    setLoading(false);
+  }, []);
+
+  useEffect(() => {
+    const active = { current: true };
+    fetch(active);
+
+    const channel = supabase
+      .channel(`realtime:${table}:${Math.random().toString(36).slice(2)}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table }, () => {
+        if (active.current) fetch(active);
+      })
+      .subscribe();
+
+    return () => {
+      active.current = false;
+      supabase.removeChannel(channel);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [table, ...deps, nonce]);
+
+  const refetch = useCallback(() => setNonce((n) => n + 1), []);
+  return { data, loading, error, refetch };
+}
+
+// ===== Committees (sourced from auth context) =====
 export function useCommittees() {
   const { committees } = useAuth();
   return { data: committees, loading: false, error: null as string | null, refetch: async () => {} };
@@ -16,7 +65,7 @@ export function useCommittees() {
 export function useMembers() {
   const { activeCommittee, profile, members, directorAssignments } = useAuth();
   const role = profile?.role ?? 'member';
-  const data = useMemo(() => {
+  const data = (() => {
     if (role === 'admin') return members;
     if (role === 'director') {
       const ids = directorAssignments.filter((d) => d.director_id === profile?.id).map((d) => d.committee_id);
@@ -24,243 +73,207 @@ export function useMembers() {
     }
     if (activeCommittee) return members.filter((m) => m.committee_id === activeCommittee.id);
     return [];
-  }, [members, role, activeCommittee, directorAssignments, profile?.id]);
+  })();
   return { data, loading: false, error: null as string | null, refetch: async () => {} };
 }
 
-function useScopedTable<T>(table: string, orderCol: string, ascending = true) {
+// ===== Scoped table hooks (realtime) =====
+export function useSessions(): QueryResult<Session> {
   const { activeCommittee, profile, directorAssignments } = useAuth();
   const role = profile?.role ?? 'member';
-  const [data, setData] = useState<T[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    let active = true;
-    (async () => {
-      setLoading(true);
-      let query = supabase.from(table).select('*');
-      if (role === 'director') {
-        const ids = directorAssignments.filter((d) => d.director_id === profile?.id).map((d) => d.committee_id);
-        query = query.in('committee_id', ids.length ? ids : ['00000000-0000-0000-0000-000000000000']);
-      } else if (role !== 'admin' && activeCommittee) {
-        query = query.eq('committee_id', activeCommittee.id);
-      }
-      const { data, error } = await query.order(orderCol, { ascending });
-      if (!active) return;
-      if (error) setError(error.message); else setData((data as T[]) ?? []);
-      setLoading(false);
-    })();
-    return () => { active = false; };
-  }, [table, orderCol, ascending, role, activeCommittee?.id, directorAssignments, profile?.id]);
-
-  return { data, loading, error, refetch: async () => {} };
+  return useRealtimeQuery<Session>('sessions', async () => {
+    let q = supabase.from('sessions').select('*');
+    if (role === 'director') {
+      const ids = directorAssignments.filter((d) => d.director_id === profile?.id).map((d) => d.committee_id);
+      q = q.in('committee_id', ids.length ? ids : ['00000000-0000-0000-0000-000000000000']);
+    } else if (role !== 'admin' && activeCommittee) {
+      q = q.eq('committee_id', activeCommittee.id);
+    }
+    const { data, error } = await q.order('publish_date', { ascending: false });
+    return { data: data as Session[] | null, error: error as { message: string } | null };
+  }, [role, activeCommittee?.id, directorAssignments, profile?.id]);
 }
 
-export function useSessions() { return useScopedTable<Session>('sessions', 'publish_date', false); }
-export function useTasks() { return useScopedTable<Task>('tasks', 'deadline', false); }
-export function useQuizzes() { return useScopedTable<Quiz>('quizzes', 'deadline', false); }
-export function useAnnouncements() { return useScopedTable<Announcement>('announcements', 'created_at', false); }
-export function useAttendance() { return useScopedTable<Attendance>('attendance', 'recorded_at', false); }
-
-// ===== Submissions & scores: scoped via committee_id on the parent task/quiz =====
-export function useTaskSubmissions() {
+export function useTasks(): QueryResult<Task> {
   const { activeCommittee, profile, directorAssignments } = useAuth();
   const role = profile?.role ?? 'member';
-  const [data, setData] = useState<TaskSubmission[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    let active = true;
-    (async () => {
-      setLoading(true);
-      let taskQuery = supabase.from('tasks').select('id, committee_id');
-      if (role === 'director') {
-        const ids = directorAssignments.filter((d) => d.director_id === profile?.id).map((d) => d.committee_id);
-        taskQuery = taskQuery.in('committee_id', ids.length ? ids : ['00000000-0000-0000-0000-000000000000']);
-      } else if (role !== 'admin' && activeCommittee) {
-        taskQuery = taskQuery.eq('committee_id', activeCommittee.id);
-      }
-      const { data: tasks } = await taskQuery;
-      const taskIds = (tasks ?? []).map((t: { id: string }) => t.id);
-      if (!active) return;
-      if (taskIds.length === 0) { setData([]); setLoading(false); return; }
-      const { data: subs, error } = await supabase.from('task_submissions').select('*').in('task_id', taskIds);
-      if (!active) return;
-      if (error) setError(error.message); else setData((subs as TaskSubmission[]) ?? []);
-      setLoading(false);
-    })();
-    return () => { active = false; };
+  return useRealtimeQuery<Task>('tasks', async () => {
+    let q = supabase.from('tasks').select('*');
+    if (role === 'director') {
+      const ids = directorAssignments.filter((d) => d.director_id === profile?.id).map((d) => d.committee_id);
+      q = q.in('committee_id', ids.length ? ids : ['00000000-0000-0000-0000-000000000000']);
+    } else if (role !== 'admin' && activeCommittee) {
+      q = q.eq('committee_id', activeCommittee.id);
+    }
+    const { data, error } = await q.order('deadline', { ascending: false });
+    return { data: data as Task[] | null, error: error as { message: string } | null };
   }, [role, activeCommittee?.id, directorAssignments, profile?.id]);
-
-  return { data, loading, error, refetch: async () => {} };
 }
 
-export function useTaskGrades() {
+export function useQuizzes(): QueryResult<Quiz> {
   const { activeCommittee, profile, directorAssignments } = useAuth();
   const role = profile?.role ?? 'member';
-  const [data, setData] = useState<TaskGrade[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    let active = true;
-    (async () => {
-      setLoading(true);
-      let taskQuery = supabase.from('tasks').select('id, committee_id');
-      if (role === 'director') {
-        const ids = directorAssignments.filter((d) => d.director_id === profile?.id).map((d) => d.committee_id);
-        taskQuery = taskQuery.in('committee_id', ids.length ? ids : ['00000000-0000-0000-0000-000000000000']);
-      } else if (role !== 'admin' && activeCommittee) {
-        taskQuery = taskQuery.eq('committee_id', activeCommittee.id);
-      }
-      const { data: tasks } = await taskQuery;
-      const taskIds = (tasks ?? []).map((t: { id: string }) => t.id);
-      if (!active) return;
-      if (taskIds.length === 0) { setData([]); setLoading(false); return; }
-      const { data: grades, error } = await supabase.from('task_grades').select('*').in('task_id', taskIds);
-      if (!active) return;
-      if (error) setError(error.message); else setData((grades as TaskGrade[]) ?? []);
-      setLoading(false);
-    })();
-    return () => { active = false; };
+  return useRealtimeQuery<Quiz>('quizzes', async () => {
+    let q = supabase.from('quizzes').select('*');
+    if (role === 'director') {
+      const ids = directorAssignments.filter((d) => d.director_id === profile?.id).map((d) => d.committee_id);
+      q = q.in('committee_id', ids.length ? ids : ['00000000-0000-0000-0000-000000000000']);
+    } else if (role !== 'admin' && activeCommittee) {
+      q = q.eq('committee_id', activeCommittee.id);
+    }
+    const { data, error } = await q.order('deadline', { ascending: false });
+    return { data: data as Quiz[] | null, error: error as { message: string } | null };
   }, [role, activeCommittee?.id, directorAssignments, profile?.id]);
-
-  return { data, loading, error, refetch: async () => {} };
 }
 
-export function useQuizScores() {
+export function useAnnouncements(): QueryResult<Announcement> {
   const { activeCommittee, profile, directorAssignments } = useAuth();
   const role = profile?.role ?? 'member';
-  const [data, setData] = useState<QuizScore[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    let active = true;
-    (async () => {
-      setLoading(true);
-      let quizQuery = supabase.from('quizzes').select('id, committee_id');
-      if (role === 'director') {
-        const ids = directorAssignments.filter((d) => d.director_id === profile?.id).map((d) => d.committee_id);
-        quizQuery = quizQuery.in('committee_id', ids.length ? ids : ['00000000-0000-0000-0000-000000000000']);
-      } else if (role !== 'admin' && activeCommittee) {
-        quizQuery = quizQuery.eq('committee_id', activeCommittee.id);
-      }
-      const { data: quizzes } = await quizQuery;
-      const quizIds = (quizzes ?? []).map((q: { id: string }) => q.id);
-      if (!active) return;
-      if (quizIds.length === 0) { setData([]); setLoading(false); return; }
-      const { data: scores, error } = await supabase.from('quiz_scores').select('*').in('quiz_id', quizIds);
-      if (!active) return;
-      if (error) setError(error.message); else setData((scores as QuizScore[]) ?? []);
-      setLoading(false);
-    })();
-    return () => { active = false; };
+  return useRealtimeQuery<Announcement>('announcements', async () => {
+    let q = supabase.from('announcements').select('*');
+    if (role === 'director') {
+      const ids = directorAssignments.filter((d) => d.director_id === profile?.id).map((d) => d.committee_id);
+      q = q.in('committee_id', ids.length ? ids : ['00000000-0000-0000-0000-000000000000']);
+    } else if (role !== 'admin' && activeCommittee) {
+      q = q.eq('committee_id', activeCommittee.id);
+    }
+    const { data, error } = await q.order('created_at', { ascending: false });
+    return { data: data as Announcement[] | null, error: error as { message: string } | null };
   }, [role, activeCommittee?.id, directorAssignments, profile?.id]);
+}
 
-  return { data, loading, error, refetch: async () => {} };
+export function useAttendance(): QueryResult<Attendance> {
+  const { activeCommittee, profile, directorAssignments } = useAuth();
+  const role = profile?.role ?? 'member';
+  return useRealtimeQuery<Attendance>('attendance', async () => {
+    let q = supabase.from('attendance').select('*');
+    if (role === 'director') {
+      const ids = directorAssignments.filter((d) => d.director_id === profile?.id).map((d) => d.committee_id);
+      q = q.in('committee_id', ids.length ? ids : ['00000000-0000-0000-0000-000000000000']);
+    } else if (role !== 'admin' && activeCommittee) {
+      q = q.eq('committee_id', activeCommittee.id);
+    }
+    const { data, error } = await q.order('recorded_at', { ascending: false });
+    return { data: data as Attendance[] | null, error: error as { message: string } | null };
+  }, [role, activeCommittee?.id, directorAssignments, profile?.id]);
+}
+
+// ===== Task grades: scoped via parent task's committee =====
+export function useTaskGrades(): QueryResult<TaskGrade> {
+  const { activeCommittee, profile, directorAssignments } = useAuth();
+  const role = profile?.role ?? 'member';
+  return useRealtimeQuery<TaskGrade>('task_grades', async () => {
+    let taskQuery = supabase.from('tasks').select('id, committee_id');
+    if (role === 'director') {
+      const ids = directorAssignments.filter((d) => d.director_id === profile?.id).map((d) => d.committee_id);
+      taskQuery = taskQuery.in('committee_id', ids.length ? ids : ['00000000-0000-0000-0000-000000000000']);
+    } else if (role !== 'admin' && activeCommittee) {
+      taskQuery = taskQuery.eq('committee_id', activeCommittee.id);
+    }
+    const { data: tasks } = await taskQuery;
+    const taskIds = (tasks ?? []).map((t: { id: string }) => t.id);
+    if (taskIds.length === 0) return { data: [], error: null };
+    const { data, error } = await supabase.from('task_grades').select('*').in('task_id', taskIds);
+    return { data: data as TaskGrade[] | null, error: error as { message: string } | null };
+  }, [role, activeCommittee?.id, directorAssignments, profile?.id]);
+}
+
+export function useQuizScores(): QueryResult<QuizScore> {
+  const { activeCommittee, profile, directorAssignments } = useAuth();
+  const role = profile?.role ?? 'member';
+  return useRealtimeQuery<QuizScore>('quiz_scores', async () => {
+    let quizQuery = supabase.from('quizzes').select('id, committee_id');
+    if (role === 'director') {
+      const ids = directorAssignments.filter((d) => d.director_id === profile?.id).map((d) => d.committee_id);
+      quizQuery = quizQuery.in('committee_id', ids.length ? ids : ['00000000-0000-0000-0000-000000000000']);
+    } else if (role !== 'admin' && activeCommittee) {
+      quizQuery = quizQuery.eq('committee_id', activeCommittee.id);
+    }
+    const { data: quizzes } = await quizQuery;
+    const quizIds = (quizzes ?? []).map((q: { id: string }) => q.id);
+    if (quizIds.length === 0) return { data: [], error: null };
+    const { data, error } = await supabase.from('quiz_scores').select('*').in('quiz_id', quizIds);
+    return { data: data as QuizScore[] | null, error: error as { message: string } | null };
+  }, [role, activeCommittee?.id, directorAssignments, profile?.id]);
 }
 
 // ===== Strikes & bonuses: scoped via member's committee =====
-export function useStrikes() {
+export function useStrikes(): QueryResult<Strike> {
   const { activeCommittee, profile, directorAssignments, members } = useAuth();
   const role = profile?.role ?? 'member';
-  const [data, setData] = useState<Strike[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    let active = true;
-    (async () => {
-      setLoading(true);
-      let memberIds: string[] = [];
-      if (role === 'admin') {
-        memberIds = members.map((m) => m.id);
-      } else if (role === 'director') {
-        const ids = directorAssignments.filter((d) => d.director_id === profile?.id).map((d) => d.committee_id);
-        memberIds = members.filter((m) => m.committee_id && ids.includes(m.committee_id)).map((m) => m.id);
-      } else if (activeCommittee) {
-        memberIds = members.filter((m) => m.committee_id === activeCommittee.id).map((m) => m.id);
-      }
-      if (!active) return;
-      if (memberIds.length === 0) { setData([]); setLoading(false); return; }
-      const { data: strikes, error } = await supabase.from('strikes').select('*').in('member_id', memberIds).order('date', { ascending: false });
-      if (!active) return;
-      if (error) setError(error.message); else setData((strikes as Strike[]) ?? []);
-      setLoading(false);
-    })();
-    return () => { active = false; };
+  return useRealtimeQuery<Strike>('strikes', async () => {
+    let memberIds: string[] = [];
+    if (role === 'admin') memberIds = members.map((m) => m.id);
+    else if (role === 'director') {
+      const ids = directorAssignments.filter((d) => d.director_id === profile?.id).map((d) => d.committee_id);
+      memberIds = members.filter((m) => m.committee_id && ids.includes(m.committee_id)).map((m) => m.id);
+    } else if (activeCommittee) {
+      memberIds = members.filter((m) => m.committee_id === activeCommittee.id).map((m) => m.id);
+    }
+    if (memberIds.length === 0) return { data: [], error: null };
+    const { data, error } = await supabase.from('strikes').select('*').in('member_id', memberIds).order('date', { ascending: false });
+    return { data: data as Strike[] | null, error: error as { message: string } | null };
   }, [role, activeCommittee?.id, directorAssignments, profile?.id, members]);
-
-  return { data, loading, error, refetch: async () => {} };
 }
 
-export function useBonuses() {
+export function useBonuses(): QueryResult<Bonus> {
   const { activeCommittee, profile, directorAssignments, members } = useAuth();
   const role = profile?.role ?? 'member';
-  const [data, setData] = useState<Bonus[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    let active = true;
-    (async () => {
-      setLoading(true);
-      let memberIds: string[] = [];
-      if (role === 'admin') {
-        memberIds = members.map((m) => m.id);
-      } else if (role === 'director') {
-        const ids = directorAssignments.filter((d) => d.director_id === profile?.id).map((d) => d.committee_id);
-        memberIds = members.filter((m) => m.committee_id && ids.includes(m.committee_id)).map((m) => m.id);
-      } else if (activeCommittee) {
-        memberIds = members.filter((m) => m.committee_id === activeCommittee.id).map((m) => m.id);
-      }
-      if (!active) return;
-      if (memberIds.length === 0) { setData([]); setLoading(false); return; }
-      const { data: bonuses, error } = await supabase.from('bonuses').select('*').in('member_id', memberIds).order('date', { ascending: false });
-      if (!active) return;
-      if (error) setError(error.message); else setData((bonuses as Bonus[]) ?? []);
-      setLoading(false);
-    })();
-    return () => { active = false; };
+  return useRealtimeQuery<Bonus>('bonuses', async () => {
+    let memberIds: string[] = [];
+    if (role === 'admin') memberIds = members.map((m) => m.id);
+    else if (role === 'director') {
+      const ids = directorAssignments.filter((d) => d.director_id === profile?.id).map((d) => d.committee_id);
+      memberIds = members.filter((m) => m.committee_id && ids.includes(m.committee_id)).map((m) => m.id);
+    } else if (activeCommittee) {
+      memberIds = members.filter((m) => m.committee_id === activeCommittee.id).map((m) => m.id);
+    }
+    if (memberIds.length === 0) return { data: [], error: null };
+    const { data, error } = await supabase.from('bonuses').select('*').in('member_id', memberIds).order('date', { ascending: false });
+    return { data: data as Bonus[] | null, error: error as { message: string } | null };
   }, [role, activeCommittee?.id, directorAssignments, profile?.id, members]);
-
-  return { data, loading, error, refetch: async () => {} };
 }
 
-// ===== Member scores view: filter by committee =====
-export function useMemberScores() {
+// ===== Member scores view: filter by committee (realtime via base tables) =====
+export function useMemberScores(): QueryResult<MemberScore> {
   const { activeCommittee, profile, directorAssignments } = useAuth();
   const role = profile?.role ?? 'member';
-  const [data, setData] = useState<MemberScore[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    let active = true;
-    (async () => {
-      setLoading(true);
-      let query = supabase.from('member_scores').select('*');
-      if (role === 'director') {
-        const ids = directorAssignments.filter((d) => d.director_id === profile?.id).map((d) => d.committee_id);
-        query = query.in('committee_id', ids.length ? ids : ['00000000-0000-0000-0000-000000000000']);
-      } else if (role !== 'admin' && activeCommittee) {
-        query = query.eq('committee_id', activeCommittee.id);
-      }
-      const { data, error } = await query.order('total_points', { ascending: false });
-      if (!active) return;
-      if (error) setError(error.message); else setData((data as MemberScore[]) ?? []);
-      setLoading(false);
-    })();
-    return () => { active = false; };
-  }, [role, activeCommittee?.id, directorAssignments, profile?.id]);
-
-  return { data, loading, error, refetch: async () => {} };
+  // member_scores is a view; we subscribe to the base tables that feed it.
+  const refetchSignal = useRealtimeSignal(['task_grades', 'quiz_scores', 'attendance', 'strikes', 'bonuses', 'members']);
+  return useRealtimeQuery<MemberScore>('member_scores', async () => {
+    let q = supabase.from('member_scores').select('*');
+    if (role === 'director') {
+      const ids = directorAssignments.filter((d) => d.director_id === profile?.id).map((d) => d.committee_id);
+      q = q.in('committee_id', ids.length ? ids : ['00000000-0000-0000-0000-000000000000']);
+    } else if (role !== 'admin' && activeCommittee) {
+      q = q.eq('committee_id', activeCommittee.id);
+    }
+    const { data, error } = await q.order('total_points', { ascending: false });
+    return { data: data as MemberScore[] | null, error: error as { message: string } | null };
+  }, [role, activeCommittee?.id, directorAssignments, profile?.id, refetchSignal]);
 }
 
-// ===== Director assignments =====
+/**
+ * Returns a counter that increments whenever any of the given tables changes.
+ * Used to trigger refetches for views that aggregate multiple base tables.
+ */
+function useRealtimeSignal(tables: string[]): number {
+  const [signal, setSignal] = useState(0);
+  const tablesKey = tables.join(',');
+  useEffect(() => {
+    const channel = supabase
+      .channel(`signal:${tablesKey}:${Math.random().toString(36).slice(2)}`)
+      .on('postgres_changes', { event: '*', schema: 'public' }, (payload) => {
+        if (tables.includes((payload as { table: string }).table)) setSignal((s) => s + 1);
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tablesKey]);
+  return signal;
+}
+
+// ===== Director assignments (sourced from auth context) =====
 export function useDirectorCommittees() {
   const { directorAssignments } = useAuth();
   return { data: directorAssignments, loading: false, error: null as string | null, refetch: async () => {} };

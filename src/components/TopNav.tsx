@@ -66,9 +66,9 @@ export function TopNav({ onMenu, onSearch }: { onMenu: () => void; onSearch: () 
                     <User size={15} className="text-ink-400" /> My Profile
                   </button>
                 )}
-                <button className="w-full flex items-center gap-2.5 px-4 h-9 text-sm text-ink-700 hover:bg-ink-100">
+                {/* <button className="w-full flex items-center gap-2.5 px-4 h-9 text-sm text-ink-700 hover:bg-ink-100">
                   <HelpCircle size={15} className="text-ink-400" /> Help & support
-                </button>
+                </button> */}
               </div>
               <div className="py-1 border-t border-ink-200/70">
                 <button onClick={signOut} className="w-full flex items-center gap-2.5 px-4 h-9 text-sm text-brand-600 hover:bg-brand-50">

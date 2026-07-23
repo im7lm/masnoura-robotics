@@ -3,7 +3,7 @@ import { Star, Save, Plus, X, TrendingUp, Award, Zap, AlertTriangle, CheckCircle
 import { Link, Breadcrumbs } from '../components/Router';
 import { Avatar, Badge, SectionHeader, EmptyState, Progress, formatDate } from '../components/ui';
 import { useAuth } from '../lib/auth';
-import { useMembers, useSessions, useAttendance, useTaskSubmissions, useQuizScores, useStrikes, useBonuses, useMemberScores } from '../lib/hooks';
+import { useMembers, useSessions, useAttendance, useTaskGrades, useTasks, useQuizScores, useStrikes, useBonuses, useMemberScores } from '../lib/hooks';
 import { supabase } from '../lib/supabase';
 import { useToast } from '../components/Toast';
 import { LineChart } from '../components/Charts';
@@ -119,19 +119,20 @@ function Calc({ label, value, tone, sign }: { label: string; value: number; tone
 }
 
 function BreakdownTab({ memberId, canEdit, push, refetch }: { memberId: string; canEdit: boolean; push: (t: 'success' | 'error' | 'info', m: string) => void; refetch: () => void }) {
-  const { data: submissions } = useTaskSubmissions();
+  const { data: grades } = useTaskGrades();
+  const { data: tasks } = useTasks();
   const { data: quizScores } = useQuizScores();
   const [editing, setEditing] = useState<Record<string, { score: string; bonus: string }>>({});
 
-  const mySubs = submissions.filter((s) => s.member_id === memberId);
+  const myGrades = grades.filter((g) => g.member_id === memberId);
   const myQuizzes = quizScores.filter((s) => s.member_id === memberId);
 
-  const saveTask = async (subId: string) => {
-    const v = editing[subId];
+  const saveTask = async (gradeId: string) => {
+    const v = editing[gradeId];
     if (!v) return;
-    const { error } = await supabase.from('task_submissions').update({ score: Number(v.score) || 0, bonus: Number(v.bonus) || 0 }).eq('id', subId);
+    const { error } = await supabase.from('task_grades').update({ points: Number(v.score) || 0, bonus: Number(v.bonus) || 0 }).eq('id', gradeId);
     if (error) { push('error', error.message); return; }
-    push('success', 'Task score saved'); refetch(); setEditing((e) => { const n = { ...e }; delete n[subId]; return n; });
+    push('success', 'Task score saved'); refetch(); setEditing((e) => { const n = { ...e }; delete n[gradeId]; return n; });
   };
 
   const saveQuiz = async (scoreId: string) => {
@@ -145,22 +146,23 @@ function BreakdownTab({ memberId, canEdit, push, refetch }: { memberId: string; 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
       <div className="card p-5">
-        <h3 className="font-semibold text-ink-900 mb-3">Task Scores ({mySubs.length})</h3>
-        {mySubs.length === 0 ? <p className="text-sm text-ink-500">No task submissions yet.</p> : (
+        <h3 className="font-semibold text-ink-900 mb-3">Task Scores ({myGrades.length})</h3>
+        {myGrades.length === 0 ? <p className="text-sm text-ink-500">No task grades yet.</p> : (
           <div className="space-y-2.5">
-            {mySubs.map((s) => {
-              const editing_ = editing[s.id];
+            {myGrades.map((g) => {
+              const task = tasks.find((t) => t.id === g.task_id);
+              const editing_ = editing[g.id];
               return (
-                <div key={s.id} className="p-3 rounded-xl border border-ink-200">
-                  <p className="text-sm font-medium text-ink-800 truncate">Task: {s.task_id.slice(0, 8)}...</p>
-                  <p className="text-xs text-ink-500 mb-2">{s.submitted_at ? formatDate(s.submitted_at, { dateStyle: 'medium' }) : 'Not submitted'}</p>
+                <div key={g.id} className="p-3 rounded-xl border border-ink-200">
+                  <p className="text-sm font-medium text-ink-800 truncate">{task?.title ?? 'Task'}</p>
+                  {g.leader_note && <p className="text-xs text-ink-500 italic mt-1">“{g.leader_note}”</p>}
                   {canEdit ? (
-                    <div className="flex items-center gap-2">
-                      <input type="number" min="0" max="10" placeholder="Score" defaultValue={s.score} onChange={(e) => setEditing((v) => ({ ...v, [s.id]: { ...v[s.id] ?? { score: '', bonus: '' }, score: e.target.value } }))} className="input !h-8 !w-20 text-center" />
-                      <input type="number" placeholder="Bonus" defaultValue={s.bonus} onChange={(e) => setEditing((v) => ({ ...v, [s.id]: { ...v[s.id] ?? { score: '', bonus: '' }, bonus: e.target.value } }))} className="input !h-8 !w-20 text-center" />
-                      <button className="btn-primary btn-sm" onClick={() => saveTask(s.id)}><Save size={12} /></button>
+                    <div className="flex items-center gap-2 mt-2">
+                      <input type="number" min="0" placeholder="Points" defaultValue={g.points} onChange={(e) => setEditing((v) => ({ ...v, [g.id]: { ...v[g.id] ?? { score: '', bonus: '' }, score: e.target.value } }))} className="input !h-8 !w-20 text-center" />
+                      <input type="number" min="0" placeholder="Bonus" defaultValue={g.bonus} onChange={(e) => setEditing((v) => ({ ...v, [g.id]: { ...v[g.id] ?? { score: '', bonus: '' }, bonus: e.target.value } }))} className="input !h-8 !w-20 text-center" />
+                      <button className="btn-primary btn-sm" onClick={() => saveTask(g.id)}><Save size={12} /></button>
                     </div>
-                  ) : <Badge tone="mint">Score {s.score}{s.bonus ? ` +${s.bonus}` : ''}</Badge>}
+                  ) : <Badge tone="mint">{g.points} pts{g.bonus ? ` (+${g.bonus} bonus)` : ''}</Badge>}
                 </div>
               );
             })}

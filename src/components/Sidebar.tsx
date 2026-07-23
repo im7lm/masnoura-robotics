@@ -37,7 +37,7 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
             <Hexagon size={20} strokeWidth={2.5} />
           </div>
           <div className="leading-tight">
-            <p className="font-semibold text-ink-900 tracking-tight">Nexus</p>
+            <p className="font-semibold text-ink-900 tracking-tight">Mansoura Robotics</p>
             <p className="text-[11px] text-ink-500">Team Portal</p>
           </div>
         </div>

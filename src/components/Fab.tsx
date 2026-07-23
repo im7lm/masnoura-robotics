@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Plus, ClipboardList, Star, Megaphone, X, GraduationCap } from 'lucide-react';
 import { useToast } from './Toast';
 import { Modal, Field } from './ui';
+import { TaskFormModal } from './TaskFormModal';
 import { useAuth } from '../lib/auth';
 import { supabase } from '../lib/supabase';
 import { useRouter } from './Router';
@@ -47,6 +48,7 @@ export function Fab() {
       </div>
 
       <CreateModal modal={modal} setModal={setModal} push={push} navigate={navigate} />
+      <TaskFormModal open={modal === 'task'} onClose={() => setModal(null)} onSaved={() => navigate('/tasks')} />
     </>
   );
 }
@@ -57,35 +59,19 @@ function CreateModal({ modal, setModal, push, navigate }: { modal: string | null
   const [desc, setDesc] = useState('');
   const [deadline, setDeadline] = useState('');
   const [url, setUrl] = useState('');
-  const [type, setType] = useState('google_form');
-  const [sessionId, setSessionId] = useState('');
-  const [sessions, setSessions] = useState<{ id: string; title: string }[]>([]);
 
-  useEffect(() => {
-    if (!activeCommittee) { setSessions([]); return; }
-    let active = true;
-    supabase.from('sessions').select('id, title').eq('committee_id', activeCommittee.id).order('title')
-      .then(({ data }) => { if (active) setSessions(data ?? []); });
-    return () => { active = false; };
-  }, [activeCommittee?.id]);
-
-  const labels: Record<string, string> = { session: 'New Session', task: 'New Task', quiz: 'New Quiz', announcement: 'New Announcement' };
+  const labels: Record<string, string> = { session: 'New Session', quiz: 'New Quiz', announcement: 'New Announcement' };
   const committeeId = activeCommittee?.id;
 
   const save = async () => {
     if (!title.trim()) { push('error', 'Add a title first'); return; }
     if (!committeeId) { push('error', 'No active workspace'); return; }
-    if (modal === 'task' && !sessionId) { push('error', 'Select a session'); return; }
     if (modal === 'session') {
       const { error } = await supabase.from('sessions').insert({ title, description: desc, video_url: url || null, publish_date: deadline || new Date().toISOString().slice(0, 10), committee_id: committeeId });
       if (error) { push('error', error.message); return; }
       push('success', 'Session created'); navigate('/sessions');
-    } else if (modal === 'task') {
-      const { error } = await supabase.from('tasks').insert({ title, description: desc, deadline: deadline || new Date().toISOString().slice(0, 10), submission_type: type, submission_url: url || null, committee_id: committeeId, session_id: sessionId });
-      if (error) { push('error', error.message); return; }
-      push('success', 'Task created'); navigate('/tasks');
     } else if (modal === 'quiz') {
-      const { error } = await supabase.from('quizzes').insert({ title, deadline: deadline || new Date().toISOString().slice(0, 10), form_url: url || null, committee_id: committeeId, session_id: sessionId || null });
+      const { error } = await supabase.from('quizzes').insert({ title, deadline: deadline || new Date().toISOString().slice(0, 10), form_url: url || null, committee_id: committeeId, session_id: null });
       if (error) { push('error', error.message); return; }
       push('success', 'Quiz created'); navigate('/quizzes');
     } else if (modal === 'announcement') {
@@ -93,12 +79,12 @@ function CreateModal({ modal, setModal, push, navigate }: { modal: string | null
       if (error) { push('error', error.message); return; }
       push('success', 'Announcement published'); navigate('/announcements');
     }
-    setModal(null); setTitle(''); setDesc(''); setDeadline(''); setUrl(''); setType('google_form'); setSessionId('');
+    setModal(null); setTitle(''); setDesc(''); setDeadline(''); setUrl('');
   };
 
   return (
     <Modal
-      open={!!modal}
+      open={!!modal && modal !== 'task'}
       onClose={() => setModal(null)}
       title={modal ? labels[modal] : ''}
       footer={<>
@@ -115,19 +101,10 @@ function CreateModal({ modal, setModal, push, navigate }: { modal: string | null
         )}
         <Field label="Title" value={title} onChange={setTitle} placeholder={`New ${modal ?? ''}`} />
         <Field label="Description" value={desc} onChange={setDesc} placeholder="Add details" textarea />
-        {modal === 'task' && (
-          <Field label="Session" value={sessionId} onChange={setSessionId} options={[
-            { value: '', label: 'Select a session...' },
-            ...sessions.map((s) => ({ value: s.id, label: s.title })),
-          ]} />
-        )}
-        {modal === 'task' && (
-          <Field label="Submission Type" value={type} onChange={setType} options={[{ value: 'google_form', label: 'Google Form' }, { value: 'external_link', label: 'External Link' }, { value: 'file_upload', label: 'File Upload' }]} />
-        )}
-        {(modal === 'task' || modal === 'quiz' || modal === 'session') && (
+        {(modal === 'quiz' || modal === 'session') && (
           <Field label={modal === 'session' ? 'Publish Date' : 'Deadline'} value={deadline} onChange={setDeadline} type="date" />
         )}
-        <Field label={modal === 'announcement' ? 'Link URL' : modal === 'session' ? 'Video URL' : modal === 'quiz' ? 'Google Form URL' : 'Submission Link'} value={url} onChange={setUrl} placeholder="https://..." />
+        <Field label={modal === 'announcement' ? 'Link URL' : modal === 'session' ? 'Video URL' : 'Google Form URL'} value={url} onChange={setUrl} placeholder="https://..." />
       </div>
     </Modal>
   );
