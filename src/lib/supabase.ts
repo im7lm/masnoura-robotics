@@ -16,11 +16,17 @@ export interface Committee {
   id: string; name: string; color: string; type: CommitteeType;
   created_at?: string;
 }
+
+export interface Section {
+  id: string; committee_id: string; name: string; created_at?: string;
+}
+
 export interface LeaderNote { from: string; date: string; text: string; }
 
 export interface Member {
   id: string; name: string; email: string; phone: string | null;
   avatar_url: string | null; committee_id: string | null;
+  section_id: string | null;
   position: string; role: Role; join_date: string; status: MemberStatus;
   notes: LeaderNote[];
   created_at?: string;
@@ -33,6 +39,7 @@ export interface DirectorCommittee {
 export interface Session {
   id: string; title: string; description: string | null;
   drive_folder_url: string | null; end_date: string; committee_id: string;
+  section_id: string | null;
   is_locked: boolean;
 }
 
@@ -43,8 +50,9 @@ export interface Task {
 }
 
 export interface Quiz {
-  id: string; session_id: string | null; title: string; deadline: string;
-  form_url: string | null; committee_id: string;
+  id: string; session_id: string | null; title: string; description: string | null;
+  deadline: string; start_datetime: string | null;
+  form_url: string | null; committee_id: string; section_id: string | null;
 }
 
 export interface QuizScore {
@@ -60,6 +68,18 @@ export interface TaskGrade {
 export interface Attendance {
   id: string; session_id: string; member_id: string; status: AttendanceStatus;
   recorded_at: string; committee_id: string;
+}
+
+export interface Meeting {
+  id: string; committee_id: string; section_id: string | null;
+  title: string; description: string | null; meeting_link: string | null;
+  meeting_date: string; meeting_time: string;
+  created_at?: string;
+}
+
+export interface MeetingAttendance {
+  id: string; meeting_id: string; member_id: string; committee_id: string;
+  status: AttendanceStatus; recorded_at: string;
 }
 
 export interface Strike { id: string; member_id: string; reason: string; date: string; points: number; }
