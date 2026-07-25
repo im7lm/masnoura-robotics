@@ -51,7 +51,7 @@ export interface Task {
 
 export interface Quiz {
   id: string; session_id: string | null; title: string; description: string | null;
-  deadline: string; start_datetime: string | null;
+  deadline: string; start_time: string | null;
   form_url: string | null; committee_id: string; section_id: string | null;
 }
 

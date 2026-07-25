@@ -17,8 +17,8 @@ import { useToast } from '../components/Toast';
 const MANAGE_ROLES = ['admin', 'director', 'team_leader', 'vice_team_leader', 'hr'];
 
 function isQuizOpen(quiz: Quiz): boolean {
-  if (!quiz.start_datetime) return true;
-  return new Date(quiz.start_datetime) <= new Date();
+  if (!quiz.start_time) return true;
+  return new Date(quiz.start_time) <= new Date();
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -42,9 +42,9 @@ export function QuizzesPage() {
     qz.title.toLowerCase().includes(q.toLowerCase()),
   );
 
-  // Open = start_datetime passed AND deadline >= today
+  // Open = start_time passed AND deadline >= today
   const openQuizzes = filtered.filter((qz) => isQuizOpen(qz) && daysUntil(qz.deadline) >= 0);
-  // Locked = start_datetime hasn't passed yet
+  // Locked = start_time hasn't passed yet
   const lockedQuizzes = filtered.filter((qz) => !isQuizOpen(qz));
   // Closed = deadline past
   const closedQuizzes = filtered.filter((qz) => isQuizOpen(qz) && daysUntil(qz.deadline) < 0);
@@ -281,21 +281,21 @@ function QuizCard({
 
         {/* Schedule */}
         <div className="mt-3 space-y-1 text-xs">
-          {quiz.start_datetime && !open && (
+          {quiz.start_time && !open && (
             <p className="text-amber-600 font-medium flex items-center gap-1">
               <Lock size={11} />
               Opens{' '}
-              {new Date(quiz.start_datetime).toLocaleString('en', {
+              {new Date(quiz.start_time).toLocaleString('en', {
                 month: 'short', day: 'numeric',
                 hour: '2-digit', minute: '2-digit',
               })}
             </p>
           )}
-          {quiz.start_datetime && open && (
+          {quiz.start_time && open && (
             <p className="text-mint-600 flex items-center gap-1">
               <CheckCircle2 size={11} />
               Opened{' '}
-              {new Date(quiz.start_datetime).toLocaleString('en', {
+              {new Date(quiz.start_time).toLocaleString('en', {
                 month: 'short', day: 'numeric',
                 hour: '2-digit', minute: '2-digit',
               })}
@@ -422,8 +422,8 @@ export function QuizFormModal({ open, onClose, onSaved, quiz }: QuizFormModalPro
       setDeadline(quiz.deadline ?? '');
       setSessionId(quiz.session_id ?? '');
       setSectionId(quiz.section_id ?? '');
-      if (quiz.start_datetime) {
-        const d = new Date(quiz.start_datetime);
+      if (quiz.start_time) {
+        const d = new Date(quiz.start_time);
         setStartDate(d.toISOString().slice(0, 10));
         setStartTime(
           `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`,
@@ -460,7 +460,7 @@ export function QuizFormModal({ open, onClose, onSaved, quiz }: QuizFormModalPro
       title: title.trim(),
       description: desc.trim() || null,
       form_url: formUrl.trim() || null,
-      start_datetime: startDatetime,
+      start_time: startDatetime,
       deadline,
       committee_id: activeCommittee.id,
       session_id: sessionId,
