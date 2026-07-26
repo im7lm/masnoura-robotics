@@ -21,10 +21,36 @@ export function TaskFormModal({ open, onClose, onSaved, task }: TaskFormModalPro
   const [documentUrl, setDocumentUrl] = useState('');
   const [submissionUrl, setSubmissionUrl] = useState('');
   const [sessionId, setSessionId] = useState('');
-  const [sessions, setSessions] = useState<{ id: string; title: string }[]>([]);
+  const [sectionId, setSectionId] = useState('');
+  const [sessions, setSessions] = useState<{ id: string; title: string; section_id: string | null }[]>([]);
+  const [sections, setSections] = useState<{ id: string; name: string }[]>([]);
   const [saving, setSaving] = useState(false);
 
   const isEdit = !!task;
+
+  // Load sections for active committee
+  useEffect(() => {
+    if (!activeCommittee) { setSections([]); return; }
+    let active = true;
+    supabase.from('sections').select('id, name').eq('committee_id', activeCommittee.id).order('name')
+      .then(({ data }) => { if (active) setSections(data ?? []); });
+    return () => { active = false; };
+  }, [activeCommittee?.id, open]);
+
+  // Load sessions for active committee
+  useEffect(() => {
+    if (!activeCommittee) { setSessions([]); return; }
+    let active = true;
+    supabase.from('sessions').select('id, title, section_id').eq('committee_id', activeCommittee.id).order('title')
+      .then(({ data }) => { if (active) setSessions(data ?? []); });
+    return () => { active = false; };
+  }, [activeCommittee?.id, open]);
+
+  // Sessions filtered by selected section
+  const filteredSessions = sessions.filter((s) => {
+    if (!sectionId) return true;
+    return !s.section_id || s.section_id === sectionId;
+  });
 
   useEffect(() => {
     if (!open) return;
@@ -35,18 +61,12 @@ export function TaskFormModal({ open, onClose, onSaved, task }: TaskFormModalPro
       setDocumentUrl(task.document_url ?? '');
       setSubmissionUrl(task.submission_url ?? '');
       setSessionId(task.session_id ?? '');
+      setSectionId(task.section_id ?? '');
     } else {
-      setTitle(''); setDesc(''); setDeadline(''); setDocumentUrl(''); setSubmissionUrl(''); setSessionId('');
+      setTitle(''); setDesc(''); setDeadline(''); setDocumentUrl('');
+      setSubmissionUrl(''); setSessionId(''); setSectionId('');
     }
   }, [open, task]);
-
-  useEffect(() => {
-    if (!activeCommittee) { setSessions([]); return; }
-    let active = true;
-    supabase.from('sessions').select('id, title').eq('committee_id', activeCommittee.id).order('title')
-      .then(({ data }) => { if (active) setSessions(data ?? []); });
-    return () => { active = false; };
-  }, [activeCommittee?.id]);
 
   const save = async () => {
     if (!title.trim()) { push('error', 'Add a title first'); return; }
@@ -62,6 +82,7 @@ export function TaskFormModal({ open, onClose, onSaved, task }: TaskFormModalPro
       submission_url: submissionUrl || null,
       committee_id: activeCommittee.id,
       session_id: sessionId,
+      section_id: sectionId || null,
     };
     const { error } = isEdit
       ? await supabase.from('tasks').update(payload).eq('id', task!.id)
@@ -91,15 +112,36 @@ export function TaskFormModal({ open, onClose, onSaved, task }: TaskFormModalPro
         {activeCommittee && (
           <div className="flex items-center gap-2 px-3 h-9 rounded-xl bg-brand-50 border border-brand-200/60 text-sm">
             <span className="w-2 h-2 rounded-full" style={{ background: activeCommittee.color }} />
-            <span className="font-medium text-brand-700">{isEdit ? 'Editing in' : 'Posting to'} {activeCommittee.name}</span>
+            <span className="font-medium text-brand-700">
+              {isEdit ? 'Editing in' : 'Posting to'} {activeCommittee.name}
+            </span>
           </div>
         )}
         <Field label="Title" value={title} onChange={setTitle} placeholder="Task title" />
         <Field label="Description" value={desc} onChange={setDesc} placeholder="Describe the assignment" textarea />
-        <Field label="Session" value={sessionId} onChange={setSessionId} options={[
-          { value: '', label: 'Select a session...' },
-          ...sessions.map((s) => ({ value: s.id, label: s.title })),
-        ]} />
+
+        {/* Section first — filters the session list */}
+        {sections.length > 0 && (
+          <Field
+            label="Section (optional)"
+            value={sectionId}
+            onChange={(v) => { setSectionId(v); setSessionId(''); }}
+            options={[
+              { value: '', label: 'All sections' },
+              ...sections.map((s) => ({ value: s.id, label: s.name })),
+            ]}
+          />
+        )}
+
+        <Field
+          label="Session"
+          value={sessionId}
+          onChange={setSessionId}
+          options={[
+            { value: '', label: 'Select a session...' },
+            ...filteredSessions.map((s) => ({ value: s.id, label: s.title })),
+          ]}
+        />
         <Field label="Deadline" value={deadline} onChange={setDeadline} type="date" />
         <Field label="Task Document URL" value={documentUrl} onChange={setDocumentUrl} placeholder="https://docs.google.com/..." />
         <Field label="Submission Link" value={submissionUrl} onChange={setSubmissionUrl} placeholder="https://forms.google.com/..." />

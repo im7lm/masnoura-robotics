@@ -21,9 +21,20 @@ export function SessionFormModal({ open, onClose, onSaved, session }: SessionFor
   const [endDate, setEndDate] = useState('');
   const [driveFolderUrl, setDriveFolderUrl] = useState('');
   const [isLocked, setIsLocked] = useState(false);
+  const [sectionId, setSectionId] = useState('');
+  const [sections, setSections] = useState<{ id: string; name: string }[]>([]);
   const [saving, setSaving] = useState(false);
 
   const isEdit = !!session;
+
+  // Load sections for the active committee
+  useEffect(() => {
+    if (!activeCommittee) { setSections([]); return; }
+    let active = true;
+    supabase.from('sections').select('id, name').eq('committee_id', activeCommittee.id).order('name')
+      .then(({ data }) => { if (active) setSections(data ?? []); });
+    return () => { active = false; };
+  }, [activeCommittee?.id, open]);
 
   useEffect(() => {
     if (!open) return;
@@ -33,8 +44,9 @@ export function SessionFormModal({ open, onClose, onSaved, session }: SessionFor
       setEndDate(session.end_date ? session.end_date.slice(0, 10) : '');
       setDriveFolderUrl(session.drive_folder_url ?? '');
       setIsLocked(session.is_locked);
+      setSectionId(session.section_id ?? '');
     } else {
-      setTitle(''); setDesc(''); setEndDate(''); setDriveFolderUrl(''); setIsLocked(false);
+      setTitle(''); setDesc(''); setEndDate(''); setDriveFolderUrl(''); setIsLocked(false); setSectionId('');
     }
   }, [open, session]);
 
@@ -49,6 +61,7 @@ export function SessionFormModal({ open, onClose, onSaved, session }: SessionFor
       drive_folder_url: driveFolderUrl || null,
       is_locked: isLocked,
       committee_id: activeCommittee.id,
+      section_id: sectionId || null,
     };
     const { error } = isEdit
       ? await supabase.from('sessions').update(payload).eq('id', session!.id)
@@ -88,6 +101,18 @@ export function SessionFormModal({ open, onClose, onSaved, session }: SessionFor
         <Field label="Description" value={desc} onChange={setDesc} placeholder="What is this session about?" textarea />
         <Field label="End Date" value={endDate} onChange={setEndDate} type="date" />
         <Field label="Drive Folder URL" value={driveFolderUrl} onChange={setDriveFolderUrl} placeholder="https://drive.google.com/..." />
+
+        {sections.length > 0 && (
+          <Field
+            label="Section (optional)"
+            value={sectionId}
+            onChange={setSectionId}
+            options={[
+              { value: '', label: 'All sections' },
+              ...sections.map((s) => ({ value: s.id, label: s.name })),
+            ]}
+          />
+        )}
 
         {/* Visibility toggle */}
         <div className="flex items-center justify-between p-3 rounded-xl border border-ink-200 bg-ink-50/40">
