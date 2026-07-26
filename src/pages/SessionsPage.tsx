@@ -361,6 +361,12 @@ export function SessionDetailsPage({ id }: { id: string }) {
     refetchSessions();
   };
 
+//   const isQuizAvailable = (startTime: string | null) => {
+//   if (!startTime) return true;
+
+//   return new Date() >= new Date(startTime);
+// };
+
   return (
     <div className="space-y-5">
       <Breadcrumbs items={[{ label: 'Workspace', to: '/dashboard' }, { label: 'Sessions', to: '/sessions' }, { label: session.title }]} />
@@ -485,22 +491,55 @@ export function SessionDetailsPage({ id }: { id: string }) {
             </div>
           ) : (
             <div className="space-y-2">
-              {sessionQuizzes.map((qz) => (
-                <div key={qz.id} className="flex items-center gap-3 p-3 rounded-xl border border-ink-200">
-                  <span className="w-8 h-8 rounded-lg bg-amber-50 flex items-center justify-center shrink-0">
-                    <Star size={14} className="text-amber-600" />
-                  </span>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-ink-800 truncate">{qz.title}</p>
-                    <p className="text-xs text-ink-400 mt-0.5">Due {formatDate(qz.deadline, { dateStyle: 'medium' })}</p>
-                  </div>
-                  {qz.form_url && (
-                    <a href={qz.form_url} target="_blank" rel="noreferrer" className="text-brand-600 hover:text-brand-700 transition-colors" title="Open quiz form">
-                      <ExternalLink size={14} />
-                    </a>
-                  )}
-                </div>
-              ))}
+              
+{sessionQuizzes.map((qz) => {
+  const available = !qz.start_time || new Date() >= new Date(qz.start_time);
+
+  return (
+    <div key={qz.id} className="flex items-center gap-3 p-3 rounded-xl border border-ink-200">
+      <span className="w-8 h-8 rounded-lg bg-amber-50 flex items-center justify-center shrink-0">
+        <Star size={14} className="text-amber-600" />
+      </span>
+
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-medium text-ink-800 truncate">
+          {qz.title}
+        </p>
+
+        <p className="text-xs text-ink-400 mt-0.5">
+          Due {formatDate(qz.deadline, { dateStyle: "medium" })}
+        </p>
+
+        {!available && (
+          <p className="text-xs text-amber-600 mt-1">
+            Quiz is not available yet
+          </p>
+        )}
+      </div>
+
+      {qz.form_url &&
+        (available ? (
+          <a
+            href={qz.form_url}
+            target="_blank"
+            rel="noreferrer"
+            className="text-brand-600 hover:text-brand-700 transition-colors"
+            title="Open quiz form"
+          >
+            <ExternalLink size={14} />
+          </a>
+        ) : (
+          <button
+            disabled
+            className="text-gray-400 cursor-not-allowed"
+            title="Quiz is not available yet"
+          >
+            <ExternalLink size={14} />
+          </button>
+        ))}
+    </div>
+  );
+})}
             </div>
           )}
         </div>

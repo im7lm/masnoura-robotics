@@ -219,7 +219,7 @@ function CommitteeCard({ committee, directors, teamLeader, viceLeader, hr, membe
         <button onClick={() => setAssigning('hr')} className="btn-secondary btn-sm flex-1 justify-center text-xs">Assign HR</button>
       </div>
 
-      <Modal open={!!assigning} onClose={() => setAssigning(null)} title={`Assign ${assigning ? ROLE_LABELS[assigning] : ''}`} footer={<>
+      {/* <Modal open={!!assigning} onClose={() => setAssigning(null)} title={`Assign ${assigning ? ROLE_LABELS[assigning] : ''}`} footer={<>
         <button className="btn-secondary btn-md" onClick={() => setAssigning(null)}>Cancel</button>
         <button className="btn-primary btn-md" onClick={() => assigning && assignRole(assigning)}>Assign</button>
       </>}>
@@ -228,7 +228,7 @@ function CommitteeCard({ committee, directors, teamLeader, viceLeader, hr, membe
           <option value="">Select user...</option>
           {candidates.map((m) => <option key={m.id} value={m.id}>{m.name} — {m.position}</option>)}
         </select>
-      </Modal>
+      </Modal> */}
     </div>
   );
 }
