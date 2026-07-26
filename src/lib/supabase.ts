@@ -46,7 +46,7 @@ export interface Session {
 export interface Task {
   id: string; session_id: string | null; title: string; description: string | null;
   deadline: string; submission_type: SubmissionType; submission_url: string | null;
-  committee_id: string; document_url: string | null;
+  committee_id: string; document_url: string | null; section_id: string | null;
 }
 
 export interface Quiz {

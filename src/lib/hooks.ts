@@ -126,45 +126,54 @@ export function useSessions(): QueryResult<Session> {
   const { activeCommittee, profile, directorAssignments } = useAuth();
   const role = profile?.role ?? 'member';
   const committeeIds = getCommitteeIds(role, activeCommittee, directorAssignments, profile?.id);
+  const sectionId = role === 'member' ? (profile?.section_id ?? null) : null;
   return useRealtimeQuery<Session>('sessions', async () => {
     let q = supabase.from('sessions').select('*');
     if (committeeIds === 'all') { /* no filter */ }
     else if (committeeIds.length === 0) return { data: [], error: null };
     else if (committeeIds.length === 1) q = q.eq('committee_id', committeeIds[0]);
     else q = q.in('committee_id', committeeIds);
+    // Members only see sessions for their section (or sessions with no section)
+    if (sectionId) q = q.or(`section_id.eq.${sectionId},section_id.is.null`);
     const { data, error } = await q.order('end_date', { ascending: false });
     return { data: data as Session[] | null, error: error as { message: string } | null };
-  }, [role, activeCommittee?.id, JSON.stringify(directorAssignments), profile?.id]);
+  }, [role, activeCommittee?.id, JSON.stringify(directorAssignments), profile?.id, sectionId]);
 }
 
 export function useTasks(): QueryResult<Task> {
   const { activeCommittee, profile, directorAssignments } = useAuth();
   const role = profile?.role ?? 'member';
   const committeeIds = getCommitteeIds(role, activeCommittee, directorAssignments, profile?.id);
+  const sectionId = role === 'member' ? (profile?.section_id ?? null) : null;
   return useRealtimeQuery<Task>('tasks', async () => {
     let q = supabase.from('tasks').select('*');
     if (committeeIds === 'all') { /* no filter */ }
     else if (committeeIds.length === 0) return { data: [], error: null };
     else if (committeeIds.length === 1) q = q.eq('committee_id', committeeIds[0]);
     else q = q.in('committee_id', committeeIds);
+    // Members only see tasks for their section (or tasks with no section)
+    if (sectionId) q = q.or(`section_id.eq.${sectionId},section_id.is.null`);
     const { data, error } = await q.order('deadline', { ascending: false });
     return { data: data as Task[] | null, error: error as { message: string } | null };
-  }, [role, activeCommittee?.id, JSON.stringify(directorAssignments), profile?.id]);
+  }, [role, activeCommittee?.id, JSON.stringify(directorAssignments), profile?.id, sectionId]);
 }
 
 export function useQuizzes(): QueryResult<Quiz> {
   const { activeCommittee, profile, directorAssignments } = useAuth();
   const role = profile?.role ?? 'member';
   const committeeIds = getCommitteeIds(role, activeCommittee, directorAssignments, profile?.id);
+  const sectionId = role === 'member' ? (profile?.section_id ?? null) : null;
   return useRealtimeQuery<Quiz>('quizzes', async () => {
     let q = supabase.from('quizzes').select('*');
     if (committeeIds === 'all') { /* no filter */ }
     else if (committeeIds.length === 0) return { data: [], error: null };
     else if (committeeIds.length === 1) q = q.eq('committee_id', committeeIds[0]);
     else q = q.in('committee_id', committeeIds);
+    // Members only see quizzes for their section (or quizzes with no section)
+    if (sectionId) q = q.or(`section_id.eq.${sectionId},section_id.is.null`);
     const { data, error } = await q.order('deadline', { ascending: false });
     return { data: data as Quiz[] | null, error: error as { message: string } | null };
-  }, [role, activeCommittee?.id, JSON.stringify(directorAssignments), profile?.id]);
+  }, [role, activeCommittee?.id, JSON.stringify(directorAssignments), profile?.id, sectionId]);
 }
 
 export function useAnnouncements(): QueryResult<Announcement> {

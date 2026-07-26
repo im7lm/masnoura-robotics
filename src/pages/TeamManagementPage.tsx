@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Building2, Users, Shield, KeyRound, Plus, Trash2, Pencil, Save, X, Mail, Lock, ChevronDown, UserCircle2 } from 'lucide-react';
+import { Building2, Users, Shield, KeyRound, Plus, Trash2, Pencil, Save, X, Mail, Lock, ChevronDown, UserCircle2, Layers } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { Badge, RoleBadge, SectionHeader, Avatar, Field, Modal, EmptyState } from '../components/ui';
 import { Breadcrumbs } from '../components/Router';
@@ -218,6 +218,9 @@ function CommitteeCard({ committee, directors, teamLeader, viceLeader, hr, membe
         <button onClick={() => setAssigning('vice_team_leader')} className="btn-secondary btn-sm flex-1 justify-center text-xs">Assign VTL</button>
         <button onClick={() => setAssigning('hr')} className="btn-secondary btn-sm flex-1 justify-center text-xs">Assign HR</button>
       </div>
+      <div className="mt-2">
+        <ManageSectionsButton committeeId={committee.id} committeeName={committee.name} />
+      </div>
 
       <Modal open={!!assigning} onClose={() => setAssigning(null)} title={`Assign ${assigning ? ROLE_LABELS[assigning] : ''}`} footer={<>
         <button className="btn-secondary btn-md" onClick={() => setAssigning(null)}>Cancel</button>
@@ -249,6 +252,143 @@ function RoleRow({ label, members, onAssign }: { label: string; members: Member[
         {onAssign && <button onClick={onAssign} className="text-xs text-brand-600 hover:underline ml-1">Change</button>}
       </div>
     </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────
+// Manage Sections — inline button + modal for a committee
+// ─────────────────────────────────────────────────────────────
+function ManageSectionsButton({ committeeId, committeeName }: { committeeId: string; committeeName: string }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <button
+        className="btn-secondary btn-sm w-full justify-center text-xs"
+        onClick={() => setOpen(true)}
+      >
+        <Layers size={13} /> Manage Sections
+      </button>
+      <SectionsModal
+        open={open}
+        onClose={() => setOpen(false)}
+        committeeId={committeeId}
+        committeeName={committeeName}
+      />
+    </>
+  );
+}
+
+function SectionsModal({
+  open, onClose, committeeId, committeeName,
+}: {
+  open: boolean; onClose: () => void; committeeId: string; committeeName: string;
+}) {
+  const { push } = useToast();
+  const [sections, setSections] = useState<{ id: string; name: string }[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [newName, setNewName] = useState('');
+  const [adding, setAdding] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editingName, setEditingName] = useState('');
+
+  const load = async () => {
+    setLoading(true);
+    const { data } = await supabase.from('sections').select('id, name').eq('committee_id', committeeId).order('name');
+    setSections(data ?? []);
+    setLoading(false);
+  };
+
+  useEffect(() => { if (open) { load(); setNewName(''); setEditingId(null); } }, [open, committeeId]);
+
+  const addSection = async () => {
+    if (!newName.trim()) return;
+    setAdding(true);
+    const { error } = await supabase.from('sections').insert({ committee_id: committeeId, name: newName.trim() });
+    setAdding(false);
+    if (error) { push('error', error.message); return; }
+    push('success', 'Section added');
+    setNewName('');
+    load();
+  };
+
+  const saveEdit = async (id: string) => {
+    if (!editingName.trim()) return;
+    const { error } = await supabase.from('sections').update({ name: editingName.trim() }).eq('id', id);
+    if (error) { push('error', error.message); return; }
+    push('success', 'Section renamed');
+    setEditingId(null);
+    load();
+  };
+
+  const deleteSection = async (id: string) => {
+    if (!confirm('Delete this section? Members in it will lose their section assignment.')) return;
+    const { error } = await supabase.from('sections').delete().eq('id', id);
+    if (error) { push('error', error.message); return; }
+    push('success', 'Section deleted');
+    load();
+  };
+
+  return (
+    <Modal
+      open={open}
+      onClose={onClose}
+      title={`Sections — ${committeeName}`}
+      width="max-w-md"
+      footer={<button className="btn-secondary btn-md" onClick={onClose}>Close</button>}
+    >
+      <div className="space-y-4">
+        {/* Add new */}
+        <div className="flex gap-2">
+          <input
+            value={newName}
+            onChange={(e) => setNewName(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && addSection()}
+            placeholder="New section name…"
+            className="input flex-1"
+          />
+          <button className="btn-primary btn-md px-3" onClick={addSection} disabled={adding || !newName.trim()}>
+            <Plus size={15} />
+          </button>
+        </div>
+
+        {/* List */}
+        {loading ? (
+          <p className="text-sm text-ink-400 py-4 text-center">Loading…</p>
+        ) : sections.length === 0 ? (
+          <p className="text-sm text-ink-400 py-4 text-center">No sections yet. Add one above.</p>
+        ) : (
+          <div className="space-y-1.5">
+            {sections.map((s) => (
+              <div key={s.id} className="flex items-center gap-2 p-2.5 rounded-xl border border-ink-100 bg-ink-50/40">
+                {editingId === s.id ? (
+                  <>
+                    <input
+                      value={editingName}
+                      onChange={(e) => setEditingName(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === 'Enter') saveEdit(s.id); if (e.key === 'Escape') setEditingId(null); }}
+                      className="input flex-1 !h-8 text-sm"
+                      autoFocus
+                    />
+                    <button onClick={() => saveEdit(s.id)} className="btn-primary btn-sm !px-2"><Save size={13} /></button>
+                    <button onClick={() => setEditingId(null)} className="btn-ghost btn-sm !px-2"><X size={13} /></button>
+                  </>
+                ) : (
+                  <>
+                    <span className="flex-1 text-sm font-medium text-ink-800">{s.name}</span>
+                    <button onClick={() => { setEditingId(s.id); setEditingName(s.name); }} className="btn-ghost btn-sm !px-2">
+                      <Pencil size={13} />
+                    </button>
+                    <button onClick={() => deleteSection(s.id)} className="btn-ghost btn-sm !px-2 text-brand-600 hover:bg-brand-50">
+                      <Trash2 size={13} />
+                    </button>
+                  </>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </Modal>
   );
 }
 
@@ -298,7 +438,20 @@ function UsersTab() {
   const [password, setPassword] = useState('');
   const [role, setRole] = useState<Role>('member');
   const [committeeId, setCommitteeId] = useState('');
+  const [sectionId, setSectionId] = useState('');
+  const [sections, setSections] = useState<{ id: string; name: string }[]>([]);
   const [creating, setCreating] = useState(false);
+
+  // Load sections when committee changes
+  useEffect(() => {
+    if (!committeeId) { setSections([]); setSectionId(''); return; }
+    supabase.from('sections').select('id, name').eq('committee_id', committeeId).order('name')
+      .then(({ data }) => setSections(data ?? []));
+    setSectionId('');
+  }, [committeeId]);
+
+  const MANAGEMENT_ROLES: Role[] = ['admin', 'director', 'team_leader', 'vice_team_leader', 'hr'];
+  const isMemberRole = role === 'member';
 
   const createUser = async () => {
     if (!name || !email || !password || !role) { push('error', 'Fill all required fields'); return; }
@@ -312,12 +465,17 @@ function UsersTab() {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${sessionData.session?.access_token}`,
         },
-        body: JSON.stringify({ name, email, password, role, committee_id: committeeId || null }),
+        body: JSON.stringify({
+          name, email, password, role,
+          committee_id: committeeId || null,
+          section_id: (isMemberRole && sectionId) ? sectionId : null,
+        }),
       });
       const data = await res.json();
       if (!res.ok) { push('error', data.error || 'Failed to create user'); return; }
       push('success', 'User created — they can now log in');
-      setShowCreate(false); setName(''); setEmail(''); setPassword(''); setRole('member'); setCommitteeId('');
+      setShowCreate(false); setName(''); setEmail(''); setPassword(''); setRole('member');
+      setCommitteeId(''); setSectionId('');
       refreshGlobal();
     } catch (err) {
       push('error', (err as Error).message);
@@ -403,6 +561,15 @@ function UsersTab() {
               {committees.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
           </div>
+          {isMemberRole && committeeId && sections.length > 0 && (
+            <div>
+              <label className="text-xs font-medium text-ink-600 mb-1.5 block">Section (optional)</label>
+              <select value={sectionId} onChange={(e) => setSectionId(e.target.value)} className="input">
+                <option value="">No section</option>
+                {sections.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+              </select>
+            </div>
+          )}
           <p className="text-xs text-ink-400">The user can immediately log in with these credentials after creation.</p>
         </div>
       </Modal>
