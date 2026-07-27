@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Modal, Field } from './ui';
 import { useAuth } from '../lib/auth';
 import { supabase } from '../lib/supabase';
@@ -26,6 +26,9 @@ export function TaskFormModal({ open, onClose, onSaved, task }: TaskFormModalPro
   const [sections, setSections] = useState<{ id: string; name: string }[]>([]);
   const [saving, setSaving] = useState(false);
 
+  // Track whether a section change came from the user (vs. populate on open)
+  const populatingRef = useRef(false);
+
   const isEdit = !!task;
 
   // Load sections for active committee
@@ -52,21 +55,33 @@ export function TaskFormModal({ open, onClose, onSaved, task }: TaskFormModalPro
     return !s.section_id || s.section_id === sectionId;
   });
 
+  // Populate form fields when opening
   useEffect(() => {
     if (!open) return;
+    populatingRef.current = true;
     if (task) {
       setTitle(task.title);
       setDesc(task.description ?? '');
       setDeadline(task.deadline ? task.deadline.slice(0, 10) : '');
       setDocumentUrl(task.document_url ?? '');
       setSubmissionUrl(task.submission_url ?? '');
-      setSessionId(task.session_id ?? '');
       setSectionId(task.section_id ?? '');
+      setSessionId(task.session_id ?? '');
     } else {
       setTitle(''); setDesc(''); setDeadline(''); setDocumentUrl('');
-      setSubmissionUrl(''); setSessionId(''); setSectionId('');
+      setSubmissionUrl(''); setSectionId(''); setSessionId('');
     }
-  }, [open, task]);
+    // Allow user-driven section changes after this tick
+    setTimeout(() => { populatingRef.current = false; }, 0);
+  }, [open, task?.id]);
+
+  const handleSectionChange = (v: string) => {
+    setSectionId(v);
+    // Only clear the session when the user manually picks a different section
+    if (!populatingRef.current) {
+      setSessionId('');
+    }
+  };
 
   const save = async () => {
     if (!title.trim()) { push('error', 'Add a title first'); return; }
@@ -125,7 +140,7 @@ export function TaskFormModal({ open, onClose, onSaved, task }: TaskFormModalPro
           <Field
             label="Section (optional)"
             value={sectionId}
-            onChange={(v) => { setSectionId(v); setSessionId(''); }}
+            onChange={handleSectionChange}
             options={[
               { value: '', label: 'All sections' },
               ...sections.map((s) => ({ value: s.id, label: s.name })),
