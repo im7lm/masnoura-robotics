@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useMemo, useState, useCallback, type ReactNode } from 'react';import type { Session } from '@supabase/supabase-js';
-import type { Member, Committee, Role, DirectorCommittee, CommitteeHr } from './supabase';
+import type { Member, Committee, Role, DirectorCommittee } from './supabase';
 import { supabase } from './supabase';
 
 interface AuthCtx {
@@ -12,7 +12,6 @@ interface AuthCtx {
   committees: Committee[];
   members: Member[];
   directorAssignments: DirectorCommittee[];
-  hrAssignments: CommitteeHr[];
 
   availableCommittees: Committee[];
   activeCommittee: Committee | null;
@@ -31,7 +30,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [members, setMembers] = useState<Member[]>([]);
   const [committees, setCommittees] = useState<Committee[]>([]);
   const [directorAssignments, setDirectorAssignments] = useState<DirectorCommittee[]>([]);
-  const [hrAssignments, setHrAssignments] = useState<CommitteeHr[]>([]);
   const [committeeId, setCommitteeId] = useState<string>(() => localStorage.getItem(STORAGE_COMMITTEE) || '');
 
   // Session listener
@@ -65,18 +63,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => { active = false; };
   }, [session?.user?.id]);
 
-  // Load committees, members, director assignments, hr assignments
+  // Load committees, members, director assignments
   const loadGlobalData = useCallback(async () => {
-    const [com, mem, dir, hr] = await Promise.all([
+    const [com, mem, dir] = await Promise.all([
       supabase.from('committees').select('*').order('name'),
       supabase.from('members').select('*').order('name'),
       supabase.from('director_committees').select('*'),
-      supabase.from('committee_hr').select('*'),
     ]);
     if (com.data) setCommittees(com.data as Committee[]);
     if (mem.data) setMembers(mem.data as Member[]);
     if (dir.data) setDirectorAssignments(dir.data as DirectorCommittee[]);
-    if (hr.data) setHrAssignments(hr.data as CommitteeHr[]);
   }, []);
 
   useEffect(() => {
@@ -96,7 +92,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'committees' }, loadGlobalData)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'members' }, loadGlobalData)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'director_committees' }, loadGlobalData)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'committee_hr' }, loadGlobalData)
       .subscribe();
     return () => { supabase.removeChannel(channel); };
   }, [profile?.id, loadGlobalData]);
@@ -140,7 +135,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setCommittees([]);
     setMembers([]);
     setDirectorAssignments([]);
-    setHrAssignments([]);
     setCommitteeId('');
     localStorage.removeItem(STORAGE_COMMITTEE);
   };
@@ -148,7 +142,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   return (
     <Ctx.Provider value={{
       session, profile, loading, signIn, signOut,
-      committees, members, directorAssignments, hrAssignments,
+      committees, members, directorAssignments,
       availableCommittees, activeCommittee, setActiveCommitteeId,
       refreshGlobal,
     }}>
