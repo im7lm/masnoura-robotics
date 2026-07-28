@@ -90,6 +90,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         .select('*')
         .eq('user_id', session.user.id)
         .maybeSingle();
+
       if (!active) return;
       setProfile(data as Member | null);
       setLoading(false);
