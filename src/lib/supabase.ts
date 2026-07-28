@@ -36,6 +36,10 @@ export interface DirectorCommittee {
   id: string; director_id: string; committee_id: string;
 }
 
+export interface CommitteeHr {
+  id: string; hr_id: string; committee_id: string;
+}
+
 export interface Session {
   id: string; title: string; description: string | null;
   drive_folder_url: string | null; end_date: string; committee_id: string;

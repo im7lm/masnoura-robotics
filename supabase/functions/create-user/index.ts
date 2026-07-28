@@ -50,7 +50,7 @@ const callerClient = createClient(
 
     // Parse request body
     const body = await req.json();
-    const { name, email, password, role, committee_id, position } = body;
+    const { name, email, password, role, committee_id, section_id, position } = body;
 
     if (!name || !email || !password || !role) {
       return new Response(JSON.stringify({ error: "Missing required fields: name, email, password, role" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
@@ -82,6 +82,7 @@ const callerClient = createClient(
         user_id: newAuthUser.user.id,
         role,
         committee_id: committee_id || null,
+        section_id: section_id || null,
         position: position || role.replace("_", " ").replace(/\b\w/g, (c: string) => c.toUpperCase()),
         status: "active",
         join_date: new Date().toISOString().slice(0, 10),
