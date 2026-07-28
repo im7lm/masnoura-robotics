@@ -243,9 +243,13 @@ function CommitteeCard({
     onRefresh();
   };
 
-  const candidates = allMembers.filter(
-    (m) => m.committee_id === committee.id || m.role === 'member' || m.committee_id === null,
-  );
+  // Each assigning slot shows only users with the matching role
+  const candidatesByRole: Record<string, Member[]> = {
+    team_leader: allMembers.filter((m) => m.role === 'team_leader'),
+    vice_team_leader: allMembers.filter((m) => m.role === 'vice_team_leader'),
+    hr: allMembers.filter((m) => m.role === 'hr'),
+  };
+  const candidates = assigning ? (candidatesByRole[assigning] ?? []) : [];
 
   return (
     <div className="card p-5">
@@ -318,7 +322,9 @@ function CommitteeCard({
             onChange={(e) => setSelectedUserId(e.target.value)}
             className="input flex-1 !h-9 text-sm"
           >
-            <option value="">Select user…</option>
+            <option value="">
+              {candidates.length === 0 ? `No ${assigning?.replace('_', ' ')} users found` : 'Select user…'}
+            </option>
             {candidates.map((m) => (
               <option key={m.id} value={m.id}>{m.name} — {m.position}</option>
             ))}
