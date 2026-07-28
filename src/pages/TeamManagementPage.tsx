@@ -170,7 +170,7 @@ function CommitteesTab() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// CommitteeCard — supports multi-HR via committee_hr, remove assignment
+// CommitteeCard
 // ─────────────────────────────────────────────────────────────────────────────
 function CommitteeCard({
   committee, directors, teamLeader, viceLeader, hrs, memberCount, allMembers, onEdit, onDelete, onRefresh,
@@ -187,10 +187,11 @@ function CommitteeCard({
   onRefresh: () => void;
 }) {
   const { push } = useToast();
-  const [assigning, setAssigning] = useState<null | 'team_leader' | 'vice_team_leader' | 'hr'>(null);
+  const [assigning, setAssigning] = useState<null | 'team_leader' | 'vice_team_leader'>(null);
   const [selectedUserId, setSelectedUserId] = useState('');
+  const [manageHrs, setManageHrs] = useState(false);
 
-  // Assign TL / VTL: single-slot roles stored on members.role + members.committee_id
+  // Assign TL / VTL: single-slot role stored on members.role + members.committee_id
   const assignSingleRole = async (role: 'team_leader' | 'vice_team_leader') => {
     if (!selectedUserId) { push('error', 'Select a user'); return; }
     // Demote existing holder back to member
@@ -202,27 +203,7 @@ function CommitteeCard({
     onRefresh();
   };
 
-  // Assign HR: insert into committee_hr, set member role to hr
-  const assignHr = async () => {
-    if (!selectedUserId) { push('error', 'Select a user'); return; }
-    // Make the user an HR if not already
-    await supabase.from('members').update({ role: 'hr' }).eq('id', selectedUserId);
-    // Upsert into committee_hr (ignore duplicate)
-    const { error } = await supabase
-      .from('committee_hr')
-      .upsert({ hr_id: selectedUserId, committee_id: committee.id }, { onConflict: 'hr_id,committee_id' });
-    if (error) { push('error', error.message); return; }
-    push('success', 'HR assigned');
-    setAssigning(null); setSelectedUserId('');
-    onRefresh();
-  };
-
-  const handleAssign = () => {
-    if (assigning === 'hr') assignHr();
-    else if (assigning) assignSingleRole(assigning);
-  };
-
-  // Remove TL / VTL assignment (demote to member, clear committee)
+  // Remove TL / VTL assignment (demote to member)
   const removeSingleRole = async (role: 'team_leader' | 'vice_team_leader', memberId: string) => {
     const { error } = await supabase.from('members').update({ role: 'member', committee_id: null }).eq('id', memberId);
     if (error) { push('error', error.message); return; }
@@ -230,24 +211,10 @@ function CommitteeCard({
     onRefresh();
   };
 
-  // Remove one HR from this committee
-  const removeHr = async (hrMemberId: string) => {
-    const { error } = await supabase.from('committee_hr').delete().eq('hr_id', hrMemberId).eq('committee_id', committee.id);
-    if (error) { push('error', error.message); return; }
-    // If HR has no more committee assignments, demote to member
-    const { data: remaining } = await supabase.from('committee_hr').select('id').eq('hr_id', hrMemberId);
-    if ((remaining ?? []).length === 0) {
-      await supabase.from('members').update({ role: 'member', committee_id: null }).eq('id', hrMemberId);
-    }
-    push('success', 'HR assignment removed');
-    onRefresh();
-  };
-
-  // Each assigning slot shows only users with the matching role
+  // Only show users with the matching role in TL/VTL dropdowns
   const candidatesByRole: Record<string, Member[]> = {
     team_leader: allMembers.filter((m) => m.role === 'team_leader'),
     vice_team_leader: allMembers.filter((m) => m.role === 'vice_team_leader'),
-    hr: allMembers.filter((m) => m.role === 'hr'),
   };
   const candidates = assigning ? (candidatesByRole[assigning] ?? []) : [];
 
@@ -283,66 +250,203 @@ function CommitteeCard({
           onAssign={() => { setAssigning('vice_team_leader'); setSelectedUserId(''); }}
           onRemove={viceLeader ? () => removeSingleRole('vice_team_leader', viceLeader.id) : undefined}
         />
-        {/* HR: multi-slot */}
+
+        {/* HR: multi-slot — click "Manage HRs" to open the dedicated modal */}
         <div className="flex items-start justify-between gap-2">
-          <span className="text-xs text-ink-500 mt-0.5">HR</span>
-          <div className="flex flex-col items-end gap-1">
-            {hrs.length === 0 && <span className="text-xs text-ink-400">Not assigned</span>}
-            {hrs.map((hr) => (
-              <div key={hr.id} className="flex items-center gap-1.5">
-                <Avatar src={hr.avatar_url} name={hr.name} size={20} />
-                <span className="text-xs font-medium text-ink-800">{hr.name}</span>
-                <button
-                  onClick={() => removeHr(hr.id)}
-                  className="text-ink-300 hover:text-brand-600 transition-colors"
-                  title="Remove HR from this committee"
-                >
-                  <X size={12} />
-                </button>
-              </div>
-            ))}
+          <span className="text-xs text-ink-500 mt-0.5 shrink-0">HR</span>
+          <div className="flex flex-col items-end gap-1 min-w-0">
+            {hrs.length === 0 ? (
+              <span className="text-xs text-ink-400">Not assigned</span>
+            ) : (
+              hrs.map((hr) => (
+                <div key={hr.id} className="flex items-center gap-1.5">
+                  <Avatar src={hr.avatar_url} name={hr.name} size={20} />
+                  <span className="text-xs font-medium text-ink-800 truncate">{hr.name}</span>
+                </div>
+              ))
+            )}
             <button
-              onClick={() => { setAssigning('hr'); setSelectedUserId(''); }}
-              className="text-xs text-brand-600 hover:underline"
+              onClick={() => setManageHrs(true)}
+              className="text-xs text-brand-600 hover:underline mt-0.5"
             >
-              {hrs.length > 0 ? '+ Add HR' : 'Assign'}
+              Manage HRs
             </button>
           </div>
         </div>
+
         <div className="flex items-center justify-between pt-2 border-t border-ink-100">
           <span className="text-xs text-ink-500">Members</span>
           <span className="text-sm font-semibold text-ink-800">{memberCount}</span>
         </div>
       </div>
 
+      {/* Inline TL / VTL assign panel */}
       {assigning && (
-        <div className="flex gap-2 p-2 rounded-xl bg-ink-50 animate-slide-down">
+        <div className="flex gap-2 p-2 rounded-xl bg-ink-50 animate-slide-down mb-3">
           <select
             value={selectedUserId}
             onChange={(e) => setSelectedUserId(e.target.value)}
             className="input flex-1 !h-9 text-sm"
           >
             <option value="">
-              {candidates.length === 0 ? `No ${assigning?.replace('_', ' ')} users found` : 'Select user…'}
+              {candidates.length === 0
+                ? `No ${assigning.replace(/_/g, ' ')} users found — create one in the Users tab`
+                : 'Select user…'}
             </option>
             {candidates.map((m) => (
               <option key={m.id} value={m.id}>{m.name} — {m.position}</option>
             ))}
           </select>
-          <button className="btn-primary btn-sm" onClick={handleAssign}>Assign</button>
+          <button className="btn-primary btn-sm" onClick={() => assignSingleRole(assigning)} disabled={!selectedUserId}>Assign</button>
           <button className="btn-secondary btn-sm" onClick={() => setAssigning(null)}>Cancel</button>
         </div>
       )}
 
-      <div className="flex gap-2 mt-4 pt-4 border-t border-ink-100">
+      <div className="flex gap-2 mt-2 pt-3 border-t border-ink-100">
         <button onClick={() => { setAssigning('team_leader'); setSelectedUserId(''); }} className="btn-secondary btn-sm flex-1 justify-center text-xs">Assign TL</button>
         <button onClick={() => { setAssigning('vice_team_leader'); setSelectedUserId(''); }} className="btn-secondary btn-sm flex-1 justify-center text-xs">Assign VTL</button>
-        <button onClick={() => { setAssigning('hr'); setSelectedUserId(''); }} className="btn-secondary btn-sm flex-1 justify-center text-xs">Assign HR</button>
+        <button onClick={() => setManageHrs(true)} className="btn-secondary btn-sm flex-1 justify-center text-xs">Manage HRs</button>
       </div>
       <div className="mt-2">
         <ManageSectionsButton committeeId={committee.id} committeeName={committee.name} />
       </div>
+
+      {/* Manage HRs modal */}
+      {manageHrs && (
+        <ManageHrsModal
+          committee={committee}
+          assignedHrs={hrs}
+          allMembers={allMembers}
+          onClose={() => setManageHrs(false)}
+          onRefresh={onRefresh}
+        />
+      )}
     </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ManageHrsModal — dedicated modal for HR ↔ committee assignments
+// Only shows users with role = 'hr'
+// ─────────────────────────────────────────────────────────────────────────────
+function ManageHrsModal({
+  committee, assignedHrs, allMembers, onClose, onRefresh,
+}: {
+  committee: Committee;
+  assignedHrs: Member[];
+  allMembers: Member[];
+  onClose: () => void;
+  onRefresh: () => void;
+}) {
+  const { push } = useToast();
+  const [selectedHrId, setSelectedHrId] = useState('');
+  const [saving, setSaving] = useState(false);
+
+  // All HR users that are NOT yet assigned to this committee
+  const availableHrs = allMembers.filter(
+    (m) => m.role === 'hr' && !assignedHrs.find((a) => a.id === m.id),
+  );
+
+  const addHr = async () => {
+    if (!selectedHrId) { push('error', 'Select an HR user'); return; }
+    setSaving(true);
+    const { error } = await supabase
+      .from('committee_hr')
+      .upsert({ hr_id: selectedHrId, committee_id: committee.id }, { onConflict: 'hr_id,committee_id' });
+    setSaving(false);
+    if (error) { push('error', error.message); return; }
+    push('success', 'HR added to committee');
+    setSelectedHrId('');
+    onRefresh();
+  };
+
+  const removeHr = async (hrMemberId: string) => {
+    const { error } = await supabase
+      .from('committee_hr')
+      .delete()
+      .eq('hr_id', hrMemberId)
+      .eq('committee_id', committee.id);
+    if (error) { push('error', error.message); return; }
+    // If this HR has no more committee assignments, clear their committee_id
+    const { data: remaining } = await supabase
+      .from('committee_hr')
+      .select('id')
+      .eq('hr_id', hrMemberId);
+    if ((remaining ?? []).length === 0) {
+      await supabase.from('members').update({ committee_id: null }).eq('id', hrMemberId);
+    }
+    push('success', 'HR removed from committee');
+    onRefresh();
+  };
+
+  return (
+    <Modal
+      open
+      onClose={onClose}
+      title={`Manage HRs — ${committee.name}`}
+      width="max-w-md"
+      footer={<button className="btn-secondary btn-md" onClick={onClose}>Close</button>}
+    >
+      <div className="space-y-4">
+        {/* Current HR assignments */}
+        <div>
+          <p className="text-xs font-semibold text-ink-500 uppercase tracking-wider mb-2">Assigned HRs</p>
+          {assignedHrs.length === 0 ? (
+            <p className="text-sm text-ink-400 py-2">No HRs assigned yet.</p>
+          ) : (
+            <div className="space-y-1.5">
+              {assignedHrs.map((hr) => (
+                <div key={hr.id} className="flex items-center gap-3 p-2.5 rounded-xl border border-ink-100 bg-ink-50/40">
+                  <Avatar src={hr.avatar_url} name={hr.name} size={32} />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-ink-800">{hr.name}</p>
+                    <p className="text-xs text-ink-400">{hr.email}</p>
+                  </div>
+                  <button
+                    onClick={() => removeHr(hr.id)}
+                    className="w-7 h-7 rounded-lg hover:bg-red-50 flex items-center justify-center text-ink-400 hover:text-brand-600 transition-colors shrink-0"
+                    title="Remove from committee"
+                  >
+                    <X size={14} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Add HR */}
+        <div className="pt-3 border-t border-ink-100">
+          <p className="text-xs font-semibold text-ink-500 uppercase tracking-wider mb-2">Add HR</p>
+          {availableHrs.length === 0 ? (
+            <p className="text-sm text-ink-400">
+              No more HR users available.{' '}
+              <span className="text-ink-500">Create a user with the HR role in the Users tab.</span>
+            </p>
+          ) : (
+            <div className="flex gap-2">
+              <select
+                value={selectedHrId}
+                onChange={(e) => setSelectedHrId(e.target.value)}
+                className="input flex-1"
+              >
+                <option value="">Select HR user…</option>
+                {availableHrs.map((m) => (
+                  <option key={m.id} value={m.id}>{m.name} — {m.position}</option>
+                ))}
+              </select>
+              <button
+                className="btn-primary btn-md"
+                onClick={addHr}
+                disabled={saving || !selectedHrId}
+              >
+                {saving ? '…' : <><Plus size={14} /> Add</>}
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+    </Modal>
   );
 }
 
