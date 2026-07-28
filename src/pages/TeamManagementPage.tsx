@@ -53,7 +53,13 @@ export function TeamManagementPage() {
 // ─────────────────────────────────────────────────────────────────────────────
 function CommitteesTab() {
   const { push } = useToast();
-  const { committees, members, directorAssignments, hrAssignments, refreshGlobal } = useAuth();
+  const {
+  committees,
+  members,
+  directorAssignments = [],
+  hrAssignments = [],
+  refreshGlobal,
+} = useAuth();
   const [showCreate, setShowCreate] = useState(false);
   const [editing, setEditing] = useState<Committee | null>(null);
 
