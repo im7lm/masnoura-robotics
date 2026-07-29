@@ -1,25 +1,31 @@
 import { useMemo, useState } from 'react';
 import { Search, ArrowUpDown, Download, UserPlus, ChevronRight, Users } from 'lucide-react';
+import * as XLSX from 'xlsx';
 import { Avatar, Badge, StatusBadge, RoleBadge, SectionHeader, Progress, EmptyState, formatDate } from '../components/ui';
 import { Link, Breadcrumbs } from '../components/Router';
 import { useToast } from '../components/Toast';
 import { useMembers, useCommittees, useMemberScores } from '../lib/hooks';
+import { useAuth, ROLE_LABELS } from '../lib/auth';
+import { CreateMemberModal } from '../components/CreateMemberModal';
+import { supabase } from '../lib/supabase';
 import type { Role } from '../lib/supabase';
 
 export function MembersPage() {
   const { push } = useToast();
+  const { activeCommittee, committees: allCommittees, refreshGlobal } = useAuth();
   const { data: members } = useMembers();
   const { data: committees } = useCommittees();
   const { data: scores } = useMemberScores();
   const [q, setQ] = useState('');
-  const [committee, setCommittee] = useState('All');
+  const [committeeFilter, setCommitteeFilter] = useState('All');
   const [role, setRole] = useState<'All' | Role>('All');
   const [sort, setSort] = useState<'name' | 'points' | 'attendance'>('points');
+  const [showAddMember, setShowAddMember] = useState(false);
 
   const filtered = useMemo(() => {
     let r = members.filter((m) =>
       m.name.toLowerCase().includes(q.toLowerCase()) &&
-      (committee === 'All' || committees.find((c) => c.id === m.committee_id)?.name === committee) &&
+      (committeeFilter === 'All' || committees.find((c) => c.id === m.committee_id)?.name === committeeFilter) &&
       (role === 'All' || m.role === role)
     );
     r = [...r].sort((a, b) => {
@@ -28,7 +34,33 @@ export function MembersPage() {
       return (scores.find((s) => s.member_id === b.id)?.total_points ?? 0) - (scores.find((s) => s.member_id === a.id)?.total_points ?? 0);
     });
     return r;
-  }, [members, q, committee, role, sort, committees, scores]);
+  }, [members, q, committeeFilter, role, sort, committees, scores]);
+
+  const handleExport = async () => {
+    // Fetch sections once for name lookups
+    const committeeIds = [...new Set(filtered.map((m) => m.committee_id).filter(Boolean) as string[])];
+    const { data: sections } = committeeIds.length
+      ? await supabase.from('sections').select('id, name').in('committee_id', committeeIds)
+      : { data: [] };
+    const sectionMap = Object.fromEntries((sections ?? []).map((s: { id: string; name: string }) => [s.id, s.name]));
+
+    const rows = filtered.map((m) => ({
+      Name: m.name,
+      Email: m.email,
+      Role: ROLE_LABELS[m.role] ?? m.role,
+      Committee: committees.find((c) => c.id === m.committee_id)?.name ?? '',
+      Section: m.section_id ? (sectionMap[m.section_id] ?? '') : '',
+      Position: m.position,
+    }));
+
+    const ws = XLSX.utils.json_to_sheet(rows);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Members');
+
+    const committeeName = activeCommittee?.name.replace(/\s+/g, '_') ?? 'Members';
+    XLSX.writeFile(wb, `${committeeName}_Members.xlsx`);
+    push('success', `Exported ${rows.length} member${rows.length !== 1 ? 's' : ''}`);
+  };
 
   return (
     <div className="space-y-5">
@@ -37,8 +69,8 @@ export function MembersPage() {
         title="Members"
         description={`${members.length} people across ${committees.length} committees`}
         action={<div className="flex gap-2">
-          <button className="btn-secondary btn-md" onClick={() => push('info', 'Exporting member directory...')}><Download size={15} /> Export</button>
-          <button className="btn-primary btn-md" onClick={() => push('success', 'Invitation sent')}><UserPlus size={15} /> Add Member</button>
+          <button className="btn-secondary btn-md" onClick={handleExport}><Download size={15} /> Export</button>
+          <button className="btn-primary btn-md" onClick={() => setShowAddMember(true)}><UserPlus size={15} /> Add Member</button>
         </div>}
       />
 
@@ -48,7 +80,7 @@ export function MembersPage() {
             <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-400" />
             <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search by name..." className="input !pl-9" />
           </div>
-          <select value={committee} onChange={(e) => setCommittee(e.target.value)} className="input !w-auto">
+          <select value={committeeFilter} onChange={(e) => setCommitteeFilter(e.target.value)} className="input !w-auto">
             <option>All</option>
             {committees.map((c) => <option key={c.id} value={c.name}>{c.name}</option>)}
           </select>
@@ -121,6 +153,15 @@ export function MembersPage() {
             </table>
           </div>
         </div>
+      )}
+
+      {showAddMember && (
+        <CreateMemberModal
+          lockedCommitteeId={activeCommittee?.id}
+          committees={allCommittees}
+          onClose={() => setShowAddMember(false)}
+          onCreated={() => { setShowAddMember(false); refreshGlobal(); }}
+        />
       )}
     </div>
   );
