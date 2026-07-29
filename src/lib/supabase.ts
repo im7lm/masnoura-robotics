@@ -69,11 +69,6 @@ export interface TaskGrade {
   created_at?: string; updated_at?: string;
 }
 
-export interface Attendance {
-  id: string; session_id: string; member_id: string; status: AttendanceStatus;
-  recorded_at: string; committee_id: string;
-}
-
 export interface Meeting {
   id: string; committee_id: string; section_id: string | null;
   title: string; description: string | null; meeting_link: string | null;

@@ -1,12 +1,11 @@
-import { useEffect, useMemo, useState } from 'react';
-import { Star, Save, Plus, X, TrendingUp, Award, Zap, AlertTriangle, CheckCircle2, Clock, XCircle } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { Star, Save, Plus, X, Award, Zap, AlertTriangle, Pencil } from 'lucide-react';
 import { Link, Breadcrumbs } from '../components/Router';
-import { Avatar, Badge, SectionHeader, EmptyState, Progress, formatDate } from '../components/ui';
+import { Avatar, Badge, SectionHeader, EmptyState, formatDate } from '../components/ui';
 import { useAuth } from '../lib/auth';
-import { useMembers, useSessions, useAttendance, useTaskGrades, useTasks, useQuizScores, useStrikes, useBonuses, useMemberScores } from '../lib/hooks';
-import { supabase } from '../lib/supabase';
+import { useMembers, useTaskGrades, useTasks, useQuizScores, useStrikes, useBonuses, useMemberScores } from '../lib/hooks';
+import { supabase, type Strike, type Bonus } from '../lib/supabase';
 import { useToast } from '../components/Toast';
-import { LineChart } from '../components/Charts';
 
 export function EvaluationPage() {
   const { role } = useAuth();
@@ -14,7 +13,7 @@ export function EvaluationPage() {
   const { data: members } = useMembers();
   const { data: scores, refetch } = useMemberScores();
   const [selectedId, setSelectedId] = useState('');
-  const [tab, setTab] = useState<'breakdown' | 'strikes' | 'bonuses' | 'history'>('breakdown');
+  const [tab, setTab] = useState<'breakdown' | 'strikes' | 'bonuses'>('breakdown');
 
   useEffect(() => {
     if (!selectedId && members.length) setSelectedId(members[0].id);
@@ -72,12 +71,10 @@ export function EvaluationPage() {
                 </div>
               </div>
 
-              {/* Auto-calc formula */}
               <div className="card p-5">
                 <h3 className="font-semibold text-ink-900 mb-1 flex items-center gap-2"><Zap size={16} className="text-brand-600" /> Final Score Calculation</h3>
                 <p className="text-xs text-ink-500 mb-4">Updates automatically as HR enters data — no manual calculation needed.</p>
-                <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
-                  {/* <Calc label="Attendance" value={score.attendance_points} tone="text-mint-500" sign="+" /> */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                   <Calc label="Tasks" value={score.task_points} tone="text-blue-600" sign="+" />
                   <Calc label="Quizzes" value={score.quiz_points} tone="text-purple-600" sign="+" />
                   <Calc label="Bonuses" value={score.bonus_points} tone="text-amber-600" sign="+" />
@@ -98,7 +95,6 @@ export function EvaluationPage() {
               {tab === 'breakdown' && <BreakdownTab memberId={member.id} canEdit={canEdit} push={push} refetch={refetch} />}
               {tab === 'strikes' && <StrikesTab memberId={member.id} canEdit={canEdit} push={push} refetch={refetch} />}
               {tab === 'bonuses' && <BonusesTab memberId={member.id} canEdit={canEdit} push={push} refetch={refetch} />}
-              {tab === 'history' && <HistoryTab memberId={member.id} />}
             </>
           ) : (
             <div className="card"><EmptyState icon={<Star size={22} />} title="Select a member" description="Choose a member from the list to view their evaluation." /></div>
@@ -151,11 +147,10 @@ function BreakdownTab({ memberId, canEdit, push, refetch }: { memberId: string; 
           <div className="space-y-2.5">
             {myGrades.map((g) => {
               const task = tasks.find((t) => t.id === g.task_id);
-              const editing_ = editing[g.id];
               return (
                 <div key={g.id} className="p-3 rounded-xl border border-ink-200">
                   <p className="text-sm font-medium text-ink-800 truncate">{task?.title ?? 'Task'}</p>
-                  {g.leader_note && <p className="text-xs text-ink-500 italic mt-1">“{g.leader_note}”</p>}
+                  {g.leader_note && <p className="text-xs text-ink-500 italic mt-1">"{g.leader_note}"</p>}
                   {canEdit ? (
                     <div className="flex items-center gap-2 mt-2">
                       <input type="number" min="0" placeholder="Points" defaultValue={g.points} onChange={(e) => setEditing((v) => ({ ...v, [g.id]: { ...v[g.id] ?? { score: '', bonus: '' }, score: e.target.value } }))} className="input !h-8 !w-20 text-center" />
@@ -200,14 +195,30 @@ function StrikesTab({ memberId, canEdit, push, refetch }: { memberId: string; ca
   const { data: strikes, refetch: r2 } = useStrikes();
   const [reason, setReason] = useState('');
   const [points, setPoints] = useState('5');
+  const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editReason, setEditReason] = useState('');
+  const [editPoints, setEditPoints] = useState('');
+  const [editDate, setEditDate] = useState('');
 
   const mine = strikes.filter((s) => s.member_id === memberId);
 
   const add = async () => {
     if (!reason.trim()) { push('error', 'Add a reason'); return; }
-    const { error } = await supabase.from('strikes').insert({ member_id: memberId, reason, points: Number(points) || 0, date: new Date().toISOString().slice(0, 10) });
+    const { error } = await supabase.from('strikes').insert({ member_id: memberId, reason, points: Number(points) || 0, date: date || new Date().toISOString().slice(0, 10) });
     if (error) { push('error', error.message); return; }
-    push('success', 'Strike recorded'); setReason(''); setPoints('5'); refetch(); r2();
+    push('success', 'Strike recorded'); setReason(''); setPoints('5'); setDate(new Date().toISOString().slice(0, 10)); refetch(); r2();
+  };
+
+  const startEdit = (s: Strike) => {
+    setEditingId(s.id); setEditReason(s.reason); setEditPoints(String(s.points)); setEditDate(s.date);
+  };
+
+  const saveEdit = async (id: string) => {
+    if (!editReason.trim()) { push('error', 'Add a reason'); return; }
+    const { error } = await supabase.from('strikes').update({ reason: editReason, points: Number(editPoints) || 0, date: editDate }).eq('id', id);
+    if (error) { push('error', error.message); return; }
+    push('success', 'Strike updated'); setEditingId(null); refetch(); r2();
   };
 
   const remove = async (id: string) => {
@@ -224,20 +235,38 @@ function StrikesTab({ memberId, canEdit, push, refetch }: { memberId: string; ca
       </div>
       <div className="space-y-2 mb-4">
         {mine.map((s) => (
-          <div key={s.id} className="flex items-center gap-3 p-3 rounded-xl bg-red-50 border border-red-100">
-            <AlertTriangle size={16} className="text-brand-600 shrink-0" />
-            <div className="flex-1">
-              <p className="text-sm font-medium text-ink-800">{s.reason}</p>
-              <p className="text-xs text-ink-500">{formatDate(s.date, { dateStyle: 'medium' })} · −{s.points} pts</p>
+          editingId === s.id ? (
+            <div key={s.id} className="p-3 rounded-xl bg-red-50 border border-red-200 space-y-2">
+              <input value={editReason} onChange={(e) => setEditReason(e.target.value)} placeholder="Reason" className="input" />
+              <div className="flex gap-2">
+                <input type="number" value={editPoints} onChange={(e) => setEditPoints(e.target.value)} placeholder="Points" className="input !w-24 text-center" />
+                <input type="date" value={editDate} onChange={(e) => setEditDate(e.target.value)} className="input !w-40" />
+                <button className="btn-primary btn-md" onClick={() => saveEdit(s.id)}><Save size={14} /> Save</button>
+                <button className="btn-secondary btn-md" onClick={() => setEditingId(null)}>Cancel</button>
+              </div>
             </div>
-            {canEdit && <button onClick={() => remove(s.id)} className="btn-ghost btn-sm !px-2 text-brand-600"><X size={14} /></button>}
-          </div>
+          ) : (
+            <div key={s.id} className="flex items-center gap-3 p-3 rounded-xl bg-red-50 border border-red-100">
+              <AlertTriangle size={16} className="text-brand-600 shrink-0" />
+              <div className="flex-1">
+                <p className="text-sm font-medium text-ink-800">{s.reason}</p>
+                <p className="text-xs text-ink-500">{formatDate(s.date, { dateStyle: 'medium' })} · −{s.points} pts</p>
+              </div>
+              {canEdit && (
+                <div className="flex gap-1">
+                  <button onClick={() => startEdit(s)} className="btn-ghost btn-sm !px-2"><Pencil size={14} /></button>
+                  <button onClick={() => remove(s.id)} className="btn-ghost btn-sm !px-2 text-brand-600"><X size={14} /></button>
+                </div>
+              )}
+            </div>
+          )
         ))}
         {mine.length === 0 && <p className="text-sm text-ink-500">No strikes. Clean record.</p>}
       </div>
       {canEdit && (
         <div className="flex gap-2 pt-4 border-t border-ink-100">
           <input value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Reason for strike" className="input flex-1" />
+          <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="input !w-36" />
           <input type="number" value={points} onChange={(e) => setPoints(e.target.value)} className="input !w-20 text-center" />
           <button className="btn-primary btn-md" onClick={add}><Plus size={14} /> Add</button>
         </div>
@@ -250,14 +279,30 @@ function BonusesTab({ memberId, canEdit, push, refetch }: { memberId: string; ca
   const { data: bonuses, refetch: r2 } = useBonuses();
   const [reason, setReason] = useState('');
   const [points, setPoints] = useState('5');
+  const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editReason, setEditReason] = useState('');
+  const [editPoints, setEditPoints] = useState('');
+  const [editDate, setEditDate] = useState('');
 
   const mine = bonuses.filter((b) => b.member_id === memberId);
 
   const add = async () => {
     if (!reason.trim()) { push('error', 'Add a reason'); return; }
-    const { error } = await supabase.from('bonuses').insert({ member_id: memberId, reason, points: Number(points) || 0, date: new Date().toISOString().slice(0, 10) });
+    const { error } = await supabase.from('bonuses').insert({ member_id: memberId, reason, points: Number(points) || 0, date: date || new Date().toISOString().slice(0, 10) });
     if (error) { push('error', error.message); return; }
-    push('success', 'Bonus added'); setReason(''); setPoints('5'); refetch(); r2();
+    push('success', 'Bonus added'); setReason(''); setPoints('5'); setDate(new Date().toISOString().slice(0, 10)); refetch(); r2();
+  };
+
+  const startEdit = (b: Bonus) => {
+    setEditingId(b.id); setEditReason(b.reason); setEditPoints(String(b.points)); setEditDate(b.date);
+  };
+
+  const saveEdit = async (id: string) => {
+    if (!editReason.trim()) { push('error', 'Add a reason'); return; }
+    const { error } = await supabase.from('bonuses').update({ reason: editReason, points: Number(editPoints) || 0, date: editDate }).eq('id', id);
+    if (error) { push('error', error.message); return; }
+    push('success', 'Bonus updated'); setEditingId(null); refetch(); r2();
   };
 
   const remove = async (id: string) => {
@@ -274,77 +319,42 @@ function BonusesTab({ memberId, canEdit, push, refetch }: { memberId: string; ca
       </div>
       <div className="space-y-2 mb-4">
         {mine.map((b) => (
-          <div key={b.id} className="flex items-center gap-3 p-3 rounded-xl bg-amber-50 border border-amber-100">
-            <Award size={16} className="text-amber-600 shrink-0" />
-            <div className="flex-1">
-              <p className="text-sm font-medium text-ink-800">{b.reason}</p>
-              <p className="text-xs text-ink-500">{formatDate(b.date, { dateStyle: 'medium' })} · +{b.points} pts</p>
+          editingId === b.id ? (
+            <div key={b.id} className="p-3 rounded-xl bg-amber-50 border border-amber-200 space-y-2">
+              <input value={editReason} onChange={(e) => setEditReason(e.target.value)} placeholder="Reason" className="input" />
+              <div className="flex gap-2">
+                <input type="number" value={editPoints} onChange={(e) => setEditPoints(e.target.value)} placeholder="Points" className="input !w-24 text-center" />
+                <input type="date" value={editDate} onChange={(e) => setEditDate(e.target.value)} className="input !w-40" />
+                <button className="btn-primary btn-md" onClick={() => saveEdit(b.id)}><Save size={14} /> Save</button>
+                <button className="btn-secondary btn-md" onClick={() => setEditingId(null)}>Cancel</button>
+              </div>
             </div>
-            {canEdit && <button onClick={() => remove(b.id)} className="btn-ghost btn-sm !px-2 text-brand-600"><X size={14} /></button>}
-          </div>
+          ) : (
+            <div key={b.id} className="flex items-center gap-3 p-3 rounded-xl bg-amber-50 border border-amber-100">
+              <Award size={16} className="text-amber-600 shrink-0" />
+              <div className="flex-1">
+                <p className="text-sm font-medium text-ink-800">{b.reason}</p>
+                <p className="text-xs text-ink-500">{formatDate(b.date, { dateStyle: 'medium' })} · +{b.points} pts</p>
+              </div>
+              {canEdit && (
+                <div className="flex gap-1">
+                  <button onClick={() => startEdit(b)} className="btn-ghost btn-sm !px-2"><Pencil size={14} /></button>
+                  <button onClick={() => remove(b.id)} className="btn-ghost btn-sm !px-2 text-brand-600"><X size={14} /></button>
+                </div>
+              )}
+            </div>
+          )
         ))}
         {mine.length === 0 && <p className="text-sm text-ink-500">No bonuses yet.</p>}
       </div>
       {canEdit && (
         <div className="flex gap-2 pt-4 border-t border-ink-100">
           <input value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Reason for bonus" className="input flex-1" />
+          <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="input !w-36" />
           <input type="number" value={points} onChange={(e) => setPoints(e.target.value)} className="input !w-20 text-center" />
           <button className="btn-primary btn-md" onClick={add}><Plus size={14} /> Add</button>
         </div>
       )}
-    </div>
-  );
-}
-
-function HistoryTab({ memberId }: { memberId: string }) {
-  const { data: attendance } = useAttendance();
-  const { data: sessions } = useSessions();
-  const mine = attendance.filter((a) => a.member_id === memberId);
-  const sorted = [...mine].sort((a, b) => +new Date(b.recorded_at) - +new Date(a.recorded_at));
-
-  const present = mine.filter((a) => a.status === 'present').length;
-  const late = mine.filter((a) => a.status === 'late').length;
-  const absent = mine.filter((a) => a.status === 'absent').length;
-  const rate = mine.length ? Math.round(100 * (present + late * 0.5) / mine.length) : 0;
-
-  return (
-    <div className="space-y-4">
-      <div className="grid grid-cols-4 gap-3">
-        <Stat label="Rate" value={`${rate}%`} tone="text-mint-500" />
-        <Stat label="Present" value={present} tone="text-mint-500" />
-        <Stat label="Late" value={late} tone="text-amber-600" />
-        <Stat label="Absent" value={absent} tone="text-brand-600" />
-      </div>
-      {/* <div className="card p-5">
-        <h3 className="font-semibold text-ink-900 mb-3">Attendance History</h3>
-        <div className="space-y-1">
-          {sorted.map((a) => {
-            const session = sessions.find((s) => s.id === a.session_id);
-            return (
-              <div key={a.id} className="flex items-center gap-3 py-2.5 border-b border-ink-100 last:border-0">
-                <div className="w-10 h-10 rounded-lg bg-ink-100 flex flex-col items-center justify-center">
-                  <span className="text-[10px] text-ink-400 uppercase">{session ? new Date(session.end_date).toLocaleDateString('en', { month: 'short' }) : '—'}</span>
-                  <span className="text-sm font-semibold text-ink-800 leading-none">{session ? new Date(session.end_date).getDate() : '—'}</span>
-                </div>
-                <div className="flex-1">
-                  <p className="text-sm font-medium text-ink-800">{session?.title ?? 'Session'}</p>
-                </div>
-                {a.status === 'present' ? <Badge tone="mint"><CheckCircle2 size={11} /> Present</Badge> : a.status === 'late' ? <Badge tone="amber"><Clock size={11} /> Late</Badge> : <Badge tone="red"><XCircle size={11} /> Absent</Badge>}
-              </div>
-            );
-          })}
-          {sorted.length === 0 && <p className="text-sm text-ink-500">No attendance recorded.</p>}
-        </div>
-      </div> */}
-    </div>
-  );
-}
-
-function Stat({ label, value, tone }: { label: string; value: string | number; tone: string }) {
-  return (
-    <div className="card p-4">
-      <p className="text-xs text-ink-500">{label}</p>
-      <p className={`text-xl font-semibold mt-1 ${tone}`}>{value}</p>
     </div>
   );
 }

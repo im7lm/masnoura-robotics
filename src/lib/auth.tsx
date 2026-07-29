@@ -6,6 +6,7 @@ import { supabase } from './supabase';
 interface AuthCtx {
   session: Session | null;
   profile: Member | null;
+  role: Role;
   loading: boolean;
   signIn: (email: string, password: string) => Promise<{ error: string | null }>;
   signOut: () => Promise<void>;
@@ -172,7 +173,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   return (
     <Ctx.Provider value={{
-      session, profile, loading, signIn, signOut,
+      session, profile, role: profile?.role ?? 'member', loading, signIn, signOut,
       committees, members, directorAssignments, hrAssignments,
       availableCommittees, activeCommittee, setActiveCommitteeId,
       refreshGlobal,

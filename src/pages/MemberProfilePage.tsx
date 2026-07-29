@@ -17,7 +17,7 @@ export function MemberProfilePage({ id }: { id: string }) {
   const { data: quizzes } = useQuizzes();
   const { data: strikes } = useStrikes();
   const { data: bonuses } = useBonuses();
-  const { role } = useAuth();
+  const { role, profile } = useAuth();
   const { push } = useToast();
   const [tab, setTab] = useState<'overview' | 'tasks' | 'quizzes' | 'notes'>('overview');
   const [note, setNote] = useState('');
@@ -33,6 +33,10 @@ export function MemberProfilePage({ id }: { id: string }) {
   const myBonuses = bonuses.filter((b) => b.member_id === id);
 
   if (!member) return <div className="card"><EmptyState icon={<Star size={22} />} title="Member not found" description="This profile doesn't exist." action={<Link to="/members" className="btn-primary btn-md">Back to members</Link>} /></div>;
+
+  if (role === 'member' && id !== profile?.id) {
+    return <div className="card"><EmptyState icon={<AlertTriangle size={22} />} title="Access denied" description="You can only view your own profile." /></div>;
+  }
 
   const canAddNote = ['admin', 'director', 'team_leader', 'vice_team_leader', 'hr'].includes(role);
 

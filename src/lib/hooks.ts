@@ -3,7 +3,7 @@ import { supabase } from './supabase';
 import { useAuth } from './auth';
 import type {
   Member, Committee, Section, Session, Task, Quiz, TaskGrade, QuizScore,
-  Attendance, Strike, Bonus, Announcement, MemberScore, Meeting, MeetingAttendance,
+  Strike, Bonus, Announcement, MemberScore, Meeting, MeetingAttendance,
 } from './supabase';
 
 type QueryResult<T> = { data: T[]; loading: boolean; error: string | null; refetch: () => void };
@@ -188,24 +188,6 @@ export function useAnnouncements(): QueryResult<Announcement> {
     else q = q.in('committee_id', committeeIds);
     const { data, error } = await q.order('created_at', { ascending: false });
     return { data: data as Announcement[] | null, error: error as { message: string } | null };
-  }, [role, activeCommittee?.id, JSON.stringify(directorAssignments), profile?.id]);
-}
-
-// Legacy attendance (kept for backward-compat with evaluation page)
-export function useAttendance(): QueryResult<Attendance> {
-  const { activeCommittee, profile, directorAssignments } = useAuth();
-  const role = profile?.role ?? 'member';
-  const committeeIds = getCommitteeIds(role, activeCommittee, directorAssignments, profile?.id);
-  return useRealtimeQuery<Attendance>('attendance', async () => {
-    // Check if attendance table exists
-    let q = supabase.from('attendance').select('*');
-    if (committeeIds === 'all') { /* no filter */ }
-    else if (committeeIds.length === 0) return { data: [], error: null };
-    else if (committeeIds.length === 1) q = q.eq('committee_id', committeeIds[0]);
-    else q = q.in('committee_id', committeeIds);
-    const { data, error } = await q.order('recorded_at', { ascending: false });
-    if (error) return { data: [], error: null }; // table may not exist
-    return { data: data as Attendance[] | null, error: null };
   }, [role, activeCommittee?.id, JSON.stringify(directorAssignments), profile?.id]);
 }
 
