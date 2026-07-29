@@ -153,8 +153,8 @@ function BreakdownTab({ memberId, canEdit, push, refetch }: { memberId: string; 
                   {g.leader_note && <p className="text-xs text-ink-500 italic mt-1">"{g.leader_note}"</p>}
                   {canEdit ? (
                     <div className="flex items-center gap-2 mt-2">
-                      <input type="number" min="0" placeholder="Points" defaultValue={g.points} onChange={(e) => setEditing((v) => ({ ...v, [g.id]: { ...v[g.id] ?? { score: '', bonus: '' }, score: e.target.value } }))} className="input !h-8 !w-20 text-center" />
-                      <input type="number" min="0" placeholder="Bonus" defaultValue={g.bonus} onChange={(e) => setEditing((v) => ({ ...v, [g.id]: { ...v[g.id] ?? { score: '', bonus: '' }, bonus: e.target.value } }))} className="input !h-8 !w-20 text-center" />
+                      <input type="number" min="0" placeholder="Points" defaultValue={g.points} onChange={(e) => setEditing((v) => ({ ...v, [g.id]: { ...v[g.id] ?? { score: '', bonus: '' }, score: e.target.value } }))} className="input !h-8 !w-1/2 text-center" />
+                      <input type="number" min="0" placeholder="Bonus" defaultValue={g.bonus} onChange={(e) => setEditing((v) => ({ ...v, [g.id]: { ...v[g.id] ?? { score: '', bonus: '' }, bonus: e.target.value } }))} className="input !h-8 !w-1/2 text-center" />
                       <button className="btn-primary btn-sm" onClick={() => saveTask(g.id)}><Save size={12} /></button>
                     </div>
                   ) : <Badge tone="mint">{g.points} pts{g.bonus ? ` (+${g.bonus} bonus)` : ''}</Badge>}
@@ -176,8 +176,8 @@ function BreakdownTab({ memberId, canEdit, push, refetch }: { memberId: string; 
                   <p className="text-xs text-ink-500 mb-2">{formatDate(s.recorded_at, { dateStyle: 'medium' })}</p>
                   {canEdit ? (
                     <div className="flex items-center gap-2">
-                      <input type="number" min="0" max="10" placeholder="Score" defaultValue={s.score} onChange={(e) => setEditing((v) => ({ ...v, [s.id]: { ...v[s.id] ?? { score: '', bonus: '' }, score: e.target.value } }))} className="input !h-8 !w-20 text-center" />
-                      <input type="number" placeholder="Bonus" defaultValue={s.bonus} onChange={(e) => setEditing((v) => ({ ...v, [s.id]: { ...v[s.id] ?? { score: '', bonus: '' }, bonus: e.target.value } }))} className="input !h-8 !w-20 text-center" />
+                      <input type="number" min="0" max="10" placeholder="Score" defaultValue={s.score} onChange={(e) => setEditing((v) => ({ ...v, [s.id]: { ...v[s.id] ?? { score: '', bonus: '' }, score: e.target.value } }))} className="input !h-8 !w-1/2 text-center" />
+                      <input type="number" placeholder="Bonus" defaultValue={s.bonus} onChange={(e) => setEditing((v) => ({ ...v, [s.id]: { ...v[s.id] ?? { score: '', bonus: '' }, bonus: e.target.value } }))} className="input !h-8 !w-1/2 text-center" />
                       <button className="btn-primary btn-sm" onClick={() => saveQuiz(s.id)}><Save size={12} /></button>
                     </div>
                   ) : <Badge tone="mint">Score {s.score}{s.bonus ? ` +${s.bonus}` : ''}</Badge>}
@@ -239,7 +239,7 @@ function StrikesTab({ memberId, canEdit, push, refetch }: { memberId: string; ca
             <div key={s.id} className="p-3 rounded-xl bg-red-50 border border-red-200 space-y-2">
               <input value={editReason} onChange={(e) => setEditReason(e.target.value)} placeholder="Reason" className="input" />
               <div className="flex gap-2">
-                <input type="number" value={editPoints} onChange={(e) => setEditPoints(e.target.value)} placeholder="Points" className="input !w-24 text-center" />
+                <input type="number" value={editPoints} onChange={(e) => setEditPoints(e.target.value)} placeholder="Points" className="input !w-25 text-center" />
                 <input type="date" value={editDate} onChange={(e) => setEditDate(e.target.value)} className="input !w-40" />
                 <button className="btn-primary btn-md" onClick={() => saveEdit(s.id)}><Save size={14} /> Save</button>
                 <button className="btn-secondary btn-md" onClick={() => setEditingId(null)}>Cancel</button>
