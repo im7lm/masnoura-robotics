@@ -12,7 +12,6 @@ export const NAV: NavItem[] = [
   { label: 'Sessions', to: '/sessions', icon: GraduationCap, roles: ['admin', 'director', 'team_leader', 'vice_team_leader', 'hr', 'member'] },
   { label: 'Tasks', to: '/tasks', icon: ClipboardList, roles: ['admin', 'director', 'team_leader', 'vice_team_leader', 'hr', 'member'] },
   { label: 'Quizzes', to: '/quizzes', icon: Star, roles: ['admin', 'director', 'team_leader', 'vice_team_leader', 'hr', 'member'] },
-  { label: 'Attendance', to: '/attendance', icon: ClipboardList, roles: ['admin', 'director', 'team_leader', 'vice_team_leader', 'hr'] },
   { label: 'Evaluation', to: '/evaluation', icon: Star, roles: ['admin', 'director', 'team_leader', 'vice_team_leader', 'hr'] },
   { label: 'Leaderboard', to: '/leaderboard', icon: Trophy, roles: ['admin', 'director', 'team_leader', 'vice_team_leader', 'hr', 'member'] },
   { label: 'Members', to: '/members', icon: Users, roles: ['admin', 'director', 'team_leader', 'vice_team_leader', 'hr'] },

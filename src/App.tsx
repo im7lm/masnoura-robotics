@@ -7,7 +7,6 @@ import { DashboardPage } from './pages/DashboardPage';
 import { SessionsPage, SessionDetailsPage } from './pages/SessionsPage';
 import { TasksPage, TaskDetailsPage } from './pages/TasksPage';
 import { QuizzesPage } from './pages/QuizzesPage';
-import { AttendancePage } from './pages/AttendancePage';
 import { EvaluationPage } from './pages/EvaluationPage';
 import { LeaderboardPage } from './pages/LeaderboardPage';
 import { MembersPage } from './pages/MembersPage';
@@ -25,7 +24,6 @@ function Routes() {
   else if (path === '/tasks') page = <TasksPage />;
   else if (path.startsWith('/tasks/')) page = <TaskDetailsPage id={path.split('/')[2]} />;
   else if (path === '/quizzes') page = <QuizzesPage />;
-  else if (path === '/attendance') page = <AttendancePage />;
   else if (path === '/evaluation') page = <EvaluationPage />;
   else if (path === '/leaderboard') page = <LeaderboardPage />;
   else if (path === '/members') page = <MembersPage />;

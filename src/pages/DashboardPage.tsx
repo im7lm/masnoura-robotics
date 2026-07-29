@@ -1,11 +1,11 @@
 import { useMemo } from 'react';
-import { CalendarDays, ClipboardList, Star, Trophy, TrendingUp, Megaphone, Clock, Video, ArrowRight, Users, Building2, Award, CheckCircle2, UserCog } from 'lucide-react';
+import { CalendarDays, ClipboardList, Star, Trophy, Megaphone, Clock, Video, ArrowRight, Users, Building2, Award, CheckCircle2, UserCog } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { Link, Breadcrumbs } from '../components/Router';
 import { Avatar, Badge, Progress } from '../components/ui';
 import { LineChart } from '../components/Charts';
 import { useAuth, ROLE_LABELS } from '../lib/auth';
-import { useSessions, useTasks, useQuizzes, useAnnouncements, useMemberScores, useMembers, useAttendance } from '../lib/hooks';
+import { useSessions, useTasks, useQuizzes, useAnnouncements, useMemberScores, useMembers } from '../lib/hooks';
 import { formatDate, daysUntil } from '../components/ui';
 
 export function DashboardPage() {
@@ -16,7 +16,6 @@ export function DashboardPage() {
   const { data: announcements } = useAnnouncements();
   const { data: scores } = useMemberScores();
   const { data: members } = useMembers();
-  const { data: attendance } = useAttendance();
 
   const today = new Date();
   const upcomingSessions = useMemo(() => sessions.filter((s) => new Date(s.end_date) >= today).slice(0, 3), [sessions]);
@@ -28,17 +27,6 @@ export function DashboardPage() {
   const myScore = scores.find((s) => s.member_id === profile?.id);
   const myRank = scores.findIndex((s) => s.member_id === profile?.id) + 1;
   const pinned = announcements.filter((a) => a.pinned);
-
-  const trend = useMemo(() => {
-    const sorted = [...sessions].sort((a, b) => +new Date(a.end_date) - +new Date(b.end_date)).slice(-6);
-    return sorted.map((s) => {
-      const att = attendance.filter((a) => a.session_id === s.id);
-      const present = att.filter((a) => a.status === 'present').length;
-      const late = att.filter((a) => a.status === 'late').length;
-      const rate = att.length ? Math.round(100 * (present + late * 0.5) / att.length) : 0;
-      return { label: new Date(s.end_date).toLocaleDateString('en', { month: 'short', day: 'numeric' }), value: rate };
-    });
-  }, [sessions, attendance]);
 
   const greeting = role === 'member' ? "Here's what's on your plate today." : role === 'director' ? "Here's the pulse across your committees." : "Here's the team's pulse today.";
 
@@ -138,16 +126,6 @@ export function DashboardPage() {
           ) : <Empty label="No upcoming quizzes" />}
         </Widget>
 
-        <Widget icon={TrendingUp} tone="bg-mint-100 text-mint-500" title="Attendance Rate" link="/attendance">
-          {myScore ? (
-            <>
-              <p className="text-3xl font-semibold text-ink-900">{myScore.attendance_rate}%</p>
-              <p className="text-xs text-ink-500 mt-1">{myScore.present_count} present · {myScore.late_count} late · {myScore.absent_count} absent</p>
-              <div className="mt-3"><Progress value={myScore.attendance_rate} tone="mint" /></div>
-            </>
-          ) : <Empty label="No attendance recorded yet" />}
-        </Widget>
-
         <Widget icon={Trophy} tone="bg-amber-50 text-amber-600" title="Current Rank" link="/leaderboard">
           {myScore && profile ? (
             <>
@@ -182,17 +160,6 @@ export function DashboardPage() {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <div className="card p-5 lg:col-span-2">
-          <div className="flex items-center justify-between mb-4">
-            <div>
-              <h3 className="font-semibold text-ink-900">Attendance Trend</h3>
-              <p className="text-xs text-ink-500 mt-0.5">{activeCommittee ? `${activeCommittee.name} attendance` : 'Team attendance'} over recent sessions</p>
-            </div>
-            <Badge tone="mint">Last 6 sessions</Badge>
-          </div>
-          {trend.length > 0 ? <LineChart data={trend} height={180} /> : <Empty label="Not enough data yet" />}
-        </div>
-
-        <div className="card p-5">
           <div className="flex items-center justify-between mb-4">
             <h3 className="font-semibold text-ink-900">Top Performers</h3>
             <Link to="/leaderboard" className="text-xs text-brand-600 hover:underline flex items-center gap-1">View all <ArrowRight size={11} /></Link>
