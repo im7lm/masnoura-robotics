@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import type { MemberStatus, SubmissionType, AttendanceStatus, Role } from '../lib/supabase';
+import type { MemberStatus, SubmissionType, Role } from '../lib/supabase';
 
 export function Badge({ children, tone = 'neutral', className = '' }: { children: ReactNode; tone?: 'neutral' | 'brand' | 'mint' | 'amber' | 'blue' | 'red' | 'purple'; className?: string; }) {
   const tones: Record<string, string> = {
@@ -43,17 +43,6 @@ export function SubmissionTypeBadge({ type }: { type: SubmissionType }) {
     google_form: 'Google Form', external_link: 'External Link', file_upload: 'File Upload',
   };
   return <Badge tone={map[type]}>{labels[type]}</Badge>;
-}
-
-export function AttendanceBadge({ status }: { status: AttendanceStatus }) {
-  const map: Record<AttendanceStatus, 'mint' | 'amber' | 'red'> = { present: 'mint', late: 'amber', absent: 'red' };
-  const dot: Record<AttendanceStatus, string> = { present: 'bg-mint-500', late: 'bg-amber-500', absent: 'bg-brand-600' };
-  return (
-    <Badge tone={map[status]}>
-      <span className={`w-1.5 h-1.5 rounded-full ${dot[status]}`} />
-      {status === 'present' ? 'Present' : status === 'late' ? 'Late' : 'Absent'}
-    </Badge>
-  );
 }
 
 export function Avatar({ src, name, size = 36, className = '' }: { src: string | null; name: string; size?: number; className?: string }) {

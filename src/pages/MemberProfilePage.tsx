@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
-import { ArrowLeft, Mail, Phone, Calendar, Star, Award, AlertTriangle, TrendingUp, CheckCircle2, Clock, XCircle, FileText, Send, Flame, Trophy } from 'lucide-react';
+import { ArrowLeft, Mail, Phone, Calendar, Star, Award, AlertTriangle, TrendingUp, FileText, Send, Trophy } from 'lucide-react';
 import { Breadcrumbs, Link } from '../components/Router';
-import { Avatar, Badge, StatusBadge, RoleBadge, Progress, EmptyState, formatDate, AttendanceBadge } from '../components/ui';
-import { useMembers, useCommittees, useMemberScores, useAttendance, useSessions, useTaskGrades, useTasks, useQuizScores, useQuizzes, useStrikes, useBonuses } from '../lib/hooks';
+import { Avatar, Badge, StatusBadge, RoleBadge, EmptyState, formatDate } from '../components/ui';
+import { useMembers, useCommittees, useMemberScores, useTaskGrades, useTasks, useQuizScores, useQuizzes, useStrikes, useBonuses } from '../lib/hooks';
 import { useAuth } from '../lib/auth';
 import { supabase } from '../lib/supabase';
 import { useToast } from '../components/Toast';
@@ -11,8 +11,6 @@ export function MemberProfilePage({ id }: { id: string }) {
   const { data: members } = useMembers();
   const { data: committees } = useCommittees();
   const { data: scores } = useMemberScores();
-  const { data: attendance } = useAttendance();
-  const { data: sessions } = useSessions();
   const { data: taskGrades } = useTaskGrades();
   const { data: tasks } = useTasks();
   const { data: quizScores } = useQuizScores();
@@ -21,7 +19,7 @@ export function MemberProfilePage({ id }: { id: string }) {
   const { data: bonuses } = useBonuses();
   const { role } = useAuth();
   const { push } = useToast();
-  const [tab, setTab] = useState<'overview' | 'attendance' | 'tasks' | 'quizzes' | 'notes'>('overview');
+  const [tab, setTab] = useState<'overview' | 'tasks' | 'quizzes' | 'notes'>('overview');
   const [note, setNote] = useState('');
 
   const member = members.find((m) => m.id === id);
@@ -29,7 +27,6 @@ export function MemberProfilePage({ id }: { id: string }) {
   const rank = scores.findIndex((s) => s.member_id === id) + 1;
   const committee = committees.find((c) => c.id === member?.committee_id);
 
-  const myAttendance = attendance.filter((a) => a.member_id === id);
   const myTaskGrades = taskGrades.filter((g) => g.member_id === id);
   const myQuizScores = quizScores.filter((s) => s.member_id === id);
   const myStrikes = strikes.filter((s) => s.member_id === id);
@@ -50,16 +47,10 @@ export function MemberProfilePage({ id }: { id: string }) {
 
   const tabs = [
     { key: 'overview' as const, label: 'Overview' },
-    { key: 'attendance' as const, label: 'Attendance' },
     { key: 'tasks' as const, label: 'Tasks' },
     { key: 'quizzes' as const, label: 'Quizzes' },
     { key: 'notes' as const, label: 'Notes' },
   ];
-
-  const streak = (() => {
-    const sorted = myAttendance.sort((a, b) => +new Date(b.recorded_at) - +new Date(a.recorded_at));
-    let s = 0; for (const a of sorted) { if (a.status === 'present') s++; else break; } return s;
-  })();
 
   return (
     <div className="space-y-5">
@@ -87,7 +78,7 @@ export function MemberProfilePage({ id }: { id: string }) {
 
       {/* Points breakdown + rank */}
       {score && (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 gap-4">
           <div className="card p-5">
             <p className="text-xs text-ink-500">Final Score</p>
             <p className="text-3xl font-semibold text-ink-900 mt-1">{score.total_points}</p>
@@ -99,16 +90,6 @@ export function MemberProfilePage({ id }: { id: string }) {
               {rank <= 3 && <Trophy size={22} />}#{rank || '—'}
             </p>
             <p className="text-xs text-ink-400 mt-1">of {scores.length} members</p>
-          </div>
-          <div className="card p-5">
-            <p className="text-xs text-ink-500">Attendance</p>
-            <p className="text-3xl font-semibold text-mint-500 mt-1">{score.attendance_rate}%</p>
-            <div className="mt-2"><Progress value={score.attendance_rate} tone="mint" /></div>
-          </div>
-          <div className="card p-5">
-            <p className="text-xs text-ink-500">Current Streak</p>
-            <p className="text-3xl font-semibold text-brand-600 mt-1 flex items-center gap-1.5"><Flame size={22} />{streak}</p>
-            <p className="text-xs text-ink-400 mt-1">sessions in a row</p>
           </div>
         </div>
       )}
@@ -176,28 +157,6 @@ export function MemberProfilePage({ id }: { id: string }) {
                 {myStrikes.length === 0 && <p className="text-sm text-ink-500">No strikes. Clean record.</p>}
               </div>
             </div>
-          </div>
-        </div>
-      )}
-
-      {tab === 'attendance' && (
-        <div className="card p-5">
-          <h3 className="font-semibold text-ink-900 mb-4">Attendance History</h3>
-          <div className="space-y-1">
-            {myAttendance.sort((a, b) => +new Date(b.recorded_at) - +new Date(a.recorded_at)).map((a) => {
-              const session = sessions.find((s) => s.id === a.session_id);
-              return (
-                <div key={a.id} className="flex items-center gap-3 py-2.5 border-b border-ink-100 last:border-0">
-                  <div className="w-10 h-10 rounded-lg bg-ink-100 flex flex-col items-center justify-center">
-                    <span className="text-[10px] text-ink-400 uppercase">{session ? new Date(session.end_date).toLocaleDateString('en', { month: 'short' }) : '—'}</span>
-                    <span className="text-sm font-semibold text-ink-800 leading-none">{session ? new Date(session.end_date).getDate() : '—'}</span>
-                  </div>
-                  <p className="flex-1 text-sm font-medium text-ink-800">{session?.title ?? 'Session'}</p>
-                  <AttendanceBadge status={a.status} />
-                </div>
-              );
-            })}
-            {myAttendance.length === 0 && <p className="text-sm text-ink-500">No attendance recorded.</p>}
           </div>
         </div>
       )}

@@ -1,31 +1,19 @@
 import { useMemo } from 'react';
-import { Trophy, Award, TrendingUp, CheckCircle2, Star, Flame } from 'lucide-react';
+import { Trophy, Award, CheckCircle2, Star } from 'lucide-react';
 import { Link, Breadcrumbs } from '../components/Router';
-import { Avatar, Badge, SectionHeader, Progress, EmptyState } from '../components/ui';
-import { useMemberScores, useMembers, useAttendance } from '../lib/hooks';
+import { Avatar, Badge, SectionHeader, EmptyState } from '../components/ui';
+import { useMemberScores, useMembers } from '../lib/hooks';
 import { useAuth } from '../lib/auth';
 
 export function LeaderboardPage() {
   const { data: scores } = useMemberScores();
   const { data: members } = useMembers();
-  const { data: attendance } = useAttendance();
   const { profile, activeCommittee, role, availableCommittees } = useAuth();
 
   const ranked = useMemo(() => [...scores].sort((a, b) => b.total_points - a.total_points), [scores]);
   const top10 = ranked.slice(0, 10);
   const best = ranked[0];
   const myRank = ranked.findIndex((s) => s.member_id === profile?.id) + 1;
-
-  // streak: consecutive present in most recent sessions
-  const streakOf = (memberId: string) => {
-    const sorted = attendance.filter((a) => a.member_id === memberId).sort((a, b) => +new Date(b.recorded_at) - +new Date(a.recorded_at));
-    let streak = 0;
-    for (const a of sorted) {
-      if (a.status === 'present') streak++;
-      else break;
-    }
-    return streak;
-  };
 
   if (ranked.length === 0) return <div className="card"><EmptyState icon={<Trophy size={22} />} title="No scores yet" description="The leaderboard fills as HR records evaluation data." /></div>;
 
@@ -49,10 +37,8 @@ export function LeaderboardPage() {
                 <Link to={`/members/${best.member_id}`} className="text-xl font-semibold text-ink-900 hover:text-brand-700 transition-colors">{best.name}</Link>
                 <p className="text-sm text-ink-500">{bm?.position ?? ''}</p>
                 <div className="flex flex-wrap gap-4 mt-2 text-sm">
-                  <span className="flex items-center gap-1.5 text-ink-600"><TrendingUp size={14} className="text-mint-500" /> {best.attendance_rate}% attendance</span>
                   <span className="flex items-center gap-1.5 text-ink-600"><CheckCircle2 size={14} className="text-blue-600" /> {best.tasks_completed} tasks</span>
                   <span className="flex items-center gap-1.5 text-ink-600"><Star size={14} className="text-purple-600" /> {best.quizzes_completed} quizzes</span>
-                  <span className="flex items-center gap-1.5 text-ink-600"><Flame size={14} className="text-brand-600" /> {streakOf(best.member_id)} streak</span>
                 </div>
               </div>
               <div className="text-center">
@@ -90,10 +76,8 @@ export function LeaderboardPage() {
                 <th className="px-5 py-3 font-medium text-xs text-ink-500 uppercase tracking-wider">Rank</th>
                 <th className="px-5 py-3 font-medium text-xs text-ink-500 uppercase tracking-wider">Member</th>
                 <th className="px-5 py-3 font-medium text-xs text-ink-500 uppercase tracking-wider">Points</th>
-                <th className="px-5 py-3 font-medium text-xs text-ink-500 uppercase tracking-wider">Attendance</th>
                 <th className="px-5 py-3 font-medium text-xs text-ink-500 uppercase tracking-wider hidden md:table-cell">Tasks</th>
                 <th className="px-5 py-3 font-medium text-xs text-ink-500 uppercase tracking-wider hidden md:table-cell">Quizzes</th>
-                <th className="px-5 py-3 font-medium text-xs text-ink-500 uppercase tracking-wider hidden lg:table-cell">Streak</th>
               </tr>
             </thead>
             <tbody>
@@ -115,17 +99,8 @@ export function LeaderboardPage() {
                       </Link>
                     </td>
                     <td className="px-5 py-3"><span className="text-base font-semibold text-ink-900">{s.total_points}</span></td>
-                    <td className="px-5 py-3">
-                      <div className="flex items-center gap-2 w-24">
-                        <Progress value={s.attendance_rate} tone={s.attendance_rate >= 80 ? 'mint' : 'amber'} />
-                        <span className="text-xs font-medium text-ink-600 w-8">{s.attendance_rate}%</span>
-                      </div>
-                    </td>
                     <td className="px-5 py-3 text-ink-700 hidden md:table-cell">{s.tasks_completed}</td>
                     <td className="px-5 py-3 text-ink-700 hidden md:table-cell">{s.quizzes_completed}</td>
-                    <td className="px-5 py-3 hidden lg:table-cell">
-                      <span className="flex items-center gap-1 text-ink-700"><Flame size={13} className="text-brand-600" /> {streakOf(s.member_id)}</span>
-                    </td>
                   </tr>
                 );
               })}

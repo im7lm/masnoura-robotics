@@ -204,6 +204,6 @@ export const ROLE_PERMISSIONS: Record<Role, string[]> = {
   director: ['Supervise multiple committees', 'Switch workspaces', 'View committee analytics', 'Oversee leaders'],
   team_leader: ['Create sessions, tasks & quizzes', 'Post announcements', 'Add leader notes', 'View committee leaderboard'],
   vice_team_leader: ['Assist team leader', 'Create sessions & tasks', 'View committee data'],
-  hr: ['Record attendance', 'Enter quiz scores', 'Evaluate tasks', 'Add strikes & bonuses', 'Write notes'],
+  hr: ['Enter quiz scores', 'Evaluate tasks', 'Add strikes & bonuses', 'Write notes'],
   member: ['View sessions', 'Submit tasks', 'Take quizzes', 'View leaderboard & announcements'],
 };

@@ -123,7 +123,7 @@ export function RadarChart({ labels, values, size = 280, color = '#E53935' }: { 
   );
 }
 
-export function DonutChart({ segments, size = 160, thickness = 18 }: { segments: { value: number; color: string; label: string }[]; size?: number; thickness?: number }) {
+export function DonutChart({ segments, size = 160, thickness = 18, centerLabel = '' }: { segments: { value: number; color: string; label: string }[]; size?: number; thickness?: number; centerLabel?: string }) {
   const { ref, inView } = useInView<HTMLDivElement>();
   const total = segments.reduce((s, x) => s + x.value, 0) || 1;
   const r = (size - thickness) / 2;
@@ -146,7 +146,7 @@ export function DonutChart({ segments, size = 160, thickness = 18 }: { segments:
       </svg>
       <div className="absolute inset-0 flex flex-col items-center justify-center">
         <span className="text-2xl font-semibold text-ink-900">{total}%</span>
-        <span className="text-[11px] text-ink-500">Attendance</span>
+        {centerLabel && <span className="text-[11px] text-ink-500">{centerLabel}</span>}
       </div>
     </div>
   );
