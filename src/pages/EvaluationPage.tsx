@@ -77,7 +77,7 @@ export function EvaluationPage() {
                 <h3 className="font-semibold text-ink-900 mb-1 flex items-center gap-2"><Zap size={16} className="text-brand-600" /> Final Score Calculation</h3>
                 <p className="text-xs text-ink-500 mb-4">Updates automatically as HR enters data — no manual calculation needed.</p>
                 <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
-                  <Calc label="Attendance" value={score.attendance_points} tone="text-mint-500" sign="+" />
+                  {/* <Calc label="Attendance" value={score.attendance_points} tone="text-mint-500" sign="+" /> */}
                   <Calc label="Tasks" value={score.task_points} tone="text-blue-600" sign="+" />
                   <Calc label="Quizzes" value={score.quiz_points} tone="text-purple-600" sign="+" />
                   <Calc label="Bonuses" value={score.bonus_points} tone="text-amber-600" sign="+" />
@@ -90,7 +90,7 @@ export function EvaluationPage() {
               </div>
 
               <div className="flex gap-1 border-b border-ink-200/70 overflow-x-auto no-scrollbar">
-                {([['breakdown', 'Breakdown'], ['strikes', 'Strikes'], ['bonuses', 'Bonuses'], ['history', 'Attendance History']] as const).map(([k, l]) => (
+                {([['breakdown', 'Breakdown'], ['strikes', 'Strikes'], ['bonuses', 'Bonuses']] as const).map(([k, l]) => (
                   <button key={k} onClick={() => setTab(k)} className={`px-4 h-10 text-sm font-medium border-b-2 -mb-px transition-colors whitespace-nowrap ${tab === k ? 'border-brand-600 text-brand-700' : 'border-transparent text-ink-500 hover:text-ink-800'}`}>{l}</button>
                 ))}
               </div>
@@ -315,7 +315,7 @@ function HistoryTab({ memberId }: { memberId: string }) {
         <Stat label="Late" value={late} tone="text-amber-600" />
         <Stat label="Absent" value={absent} tone="text-brand-600" />
       </div>
-      <div className="card p-5">
+      {/* <div className="card p-5">
         <h3 className="font-semibold text-ink-900 mb-3">Attendance History</h3>
         <div className="space-y-1">
           {sorted.map((a) => {
@@ -335,7 +335,7 @@ function HistoryTab({ memberId }: { memberId: string }) {
           })}
           {sorted.length === 0 && <p className="text-sm text-ink-500">No attendance recorded.</p>}
         </div>
-      </div>
+      </div> */}
     </div>
   );
 }

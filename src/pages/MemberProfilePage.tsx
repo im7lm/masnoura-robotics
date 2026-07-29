@@ -99,7 +99,7 @@ export function MemberProfilePage({ id }: { id: string }) {
         <div className="card p-5">
           <h3 className="font-semibold text-ink-900 mb-3 flex items-center gap-2"><TrendingUp size={16} className="text-brand-600" /> Points Breakdown</h3>
           <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
-            <Calc label="Attendance" value={score.attendance_points} tone="text-mint-500" sign="+" />
+            {/* <Calc label="Attendance" value={score.attendance_points} tone="text-mint-500" sign="+" /> */}
             <Calc label="Tasks" value={score.task_points} tone="text-blue-600" sign="+" />
             <Calc label="Quizzes" value={score.quiz_points} tone="text-purple-600" sign="+" />
             <Calc label="Bonuses" value={score.bonus_points} tone="text-amber-600" sign="+" />

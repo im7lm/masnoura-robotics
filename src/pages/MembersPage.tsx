@@ -111,7 +111,7 @@ export function MembersPage() {
                   <th className="px-5 py-3 font-medium text-xs text-ink-500 uppercase tracking-wider">Role</th>
                   <th className="px-5 py-3 font-medium text-xs text-ink-500 uppercase tracking-wider">Committee</th>
                   <th className="px-5 py-3 font-medium text-xs text-ink-500 uppercase tracking-wider">Joined</th>
-                  <th className="px-5 py-3 font-medium text-xs text-ink-500 uppercase tracking-wider">Attendance</th>
+                  {/* <th className="px-5 py-3 font-medium text-xs text-ink-500 uppercase tracking-wider">Attendance</th> */}
                   <th className="px-5 py-3 font-medium text-xs text-ink-500 uppercase tracking-wider">Points</th>
                   <th className="px-5 py-3 font-medium text-xs text-ink-500 uppercase tracking-wider">Status</th>
                   <th className="px-5 py-3"></th>
@@ -135,12 +135,12 @@ export function MembersPage() {
                       <td className="px-5 py-3"><RoleBadge role={m.role} /></td>
                       <td className="px-5 py-3">{committee_ ? <Badge tone="neutral">{committee_.name}</Badge> : <span className="text-ink-400">—</span>}</td>
                       <td className="px-5 py-3 text-ink-500">{formatDate(m.join_date, { month: 'short', year: 'numeric' })}</td>
-                      <td className="px-5 py-3">
+                      {/* <td className="px-5 py-3">
                         <div className="flex items-center gap-2 w-28">
                           <Progress value={score?.attendance_rate ?? 0} tone={(score?.attendance_rate ?? 0) >= 80 ? 'mint' : 'amber'} />
                           <span className="text-xs font-medium text-ink-600 w-8">{score?.attendance_rate ?? 0}%</span>
                         </div>
-                      </td>
+                      </td> */}
                       <td className="px-5 py-3"><span className="text-sm font-semibold text-ink-900">{score?.total_points ?? 0}</span></td>
                       <td className="px-5 py-3"><StatusBadge status={m.status} /></td>
                       <td className="px-5 py-3 text-right">
