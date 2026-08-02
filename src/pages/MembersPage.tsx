@@ -13,20 +13,19 @@ import type { Role } from '../lib/supabase';
 export function MembersPage() {
   const { push } = useToast();
   const { activeCommittee, committees: allCommittees, refreshGlobal } = useAuth();
-  const { data: members } = useMembers();
+  const { data: allMembers } = useMembers();
   const { data: committees } = useCommittees();
   const { data: scores } = useMemberScores();
+  const members = useMemo(() => allMembers.filter((m) => m.role === 'member'), [allMembers]);
   const [q, setQ] = useState('');
   const [committeeFilter, setCommitteeFilter] = useState('All');
-  const [role, setRole] = useState<'All' | Role>('All');
   const [sort, setSort] = useState<'name' | 'points' | 'attendance'>('points');
   const [showAddMember, setShowAddMember] = useState(false);
 
   const filtered = useMemo(() => {
     let r = members.filter((m) =>
       m.name.toLowerCase().includes(q.toLowerCase()) &&
-      (committeeFilter === 'All' || committees.find((c) => c.id === m.committee_id)?.name === committeeFilter) &&
-      (role === 'All' || m.role === role)
+      (committeeFilter === 'All' || committees.find((c) => c.id === m.committee_id)?.name === committeeFilter)
     );
     r = [...r].sort((a, b) => {
       if (sort === 'name') return a.name.localeCompare(b.name);
@@ -34,7 +33,7 @@ export function MembersPage() {
       return (scores.find((s) => s.member_id === b.id)?.total_points ?? 0) - (scores.find((s) => s.member_id === a.id)?.total_points ?? 0);
     });
     return r;
-  }, [members, q, committeeFilter, role, sort, committees, scores]);
+  }, [members, q, committeeFilter, sort, committees, scores]);
 
   const handleExport = async () => {
     // Fetch sections once for name lookups
@@ -83,10 +82,6 @@ export function MembersPage() {
           <select value={committeeFilter} onChange={(e) => setCommitteeFilter(e.target.value)} className="input !w-auto">
             <option>All</option>
             {committees.map((c) => <option key={c.id} value={c.name}>{c.name}</option>)}
-          </select>
-          <select value={role} onChange={(e) => setRole(e.target.value as any)} className="input !w-auto">
-            <option value="All">All roles</option>
-            <option value="admin">Admin</option><option value="hr">HR</option><option value="team_leader">Team Leader</option><option value="member">Member</option>
           </select>
           <div className="relative">
             <ArrowUpDown size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-ink-400 pointer-events-none" />

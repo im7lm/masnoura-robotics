@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Star, Save, Plus, X, Award, Zap, AlertTriangle, Pencil } from 'lucide-react';
 import { Link, Breadcrumbs } from '../components/Router';
 import { Avatar, Badge, SectionHeader, EmptyState, formatDate } from '../components/ui';
@@ -10,8 +10,10 @@ import { useToast } from '../components/Toast';
 export function EvaluationPage() {
   const { role } = useAuth();
   const { push } = useToast();
-  const { data: members } = useMembers();
-  const { data: scores, refetch } = useMemberScores();
+  const { data: allMembers } = useMembers();
+  const { data: allScores, refetch } = useMemberScores();
+  const members = useMemo(() => allMembers.filter((m) => m.role === 'member'), [allMembers]);
+  const scores = useMemo(() => allScores.filter((s) => members.some((m) => m.id === s.member_id)), [allScores, members]);
   const [selectedId, setSelectedId] = useState('');
   const [tab, setTab] = useState<'breakdown' | 'strikes' | 'bonuses'>('breakdown');
 
